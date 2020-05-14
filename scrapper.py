@@ -254,7 +254,7 @@ class Scrapper:
                                                     {
                                                         "$ne": [
                                                             {
-                                                                "$type": "$domain_use_for.broken_link_check_service"
+                                                                "$type": "$domain_use_for.broken_links_check_service"
                                                             },
                                                             'missing'
                                                         ]
@@ -262,7 +262,7 @@ class Scrapper:
                                                     {
                                                         "$ne": [
                                                             {
-                                                                "$type": "$domain_use_for.amazon_product_check_service"
+                                                                "$type": "$domain_use_for.amazon_products_check_service"
                                                             },
                                                             'missing'
                                                         ]
@@ -412,7 +412,7 @@ class Scrapper:
             
             async for guest_post in self.__links_in_guest_posts.aggregate( pipeline ):
                 # print(guest_post)
-                service_info = guest_post[ 'user_domain' ][ 0 ][ 'domain_use_for' ][ 'guest_post_check_service' ]
+                service_info = guest_post[ 'user_domain' ][ 0 ][ 'domain_use_for' ][ 'guest_posts_check_service' ]
                 guest_domain_id = service_info[ 'guest_domain_id' ]
                 guest_post_url = guest_post[ 'guest_post_url' ]
                 
@@ -878,7 +878,7 @@ class Scrapper:
                     
                     # print( parse.urlparse( joined_url ) )
                 
-                if 'broken_link_check_service' in domain_use_for or 'amazon_product_check_service' in domain_use_for:
+                if 'broken_links_check_service' in domain_use_for or 'amazon_products_check_service' in domain_use_for:
                     for inbound_link in inbound_links:
                         await self.__pages.update_one(
                             {
@@ -897,7 +897,7 @@ class Scrapper:
                             upsert=True
                         )
                 
-                if 'amazon_product_check_service' in domain_use_for:
+                if 'amazon_products_check_service' in domain_use_for:
                     for outbound_link in outbound_links:
                         if tldextract.extract( outbound_link[ 'link' ] ).domain == 'amazon':
                             parsed_outbound_url = parse.urlparse( outbound_link[ 'link' ] )
@@ -906,8 +906,8 @@ class Scrapper:
                             if 'tag' in parsed_query_params:
                                 affiliate_id = parsed_query_params[ 'tag' ][ 0 ]
                                 
-                                if 'affiliate_ids' in domain_use_for[ 'amazon_product_check_service' ]:
-                                    affiliate_ids = domain_use_for[ 'amazon_product_check_service' ][ 'affiliate_ids' ]
+                                if 'affiliate_ids' in domain_use_for[ 'amazon_products_check_service' ]:
+                                    affiliate_ids = domain_use_for[ 'amazon_products_check_service' ][ 'affiliate_ids' ]
                                     
                                     if affiliate_id in affiliate_ids:
                                         only_product_url = parse.urlunparse( (
@@ -1388,13 +1388,13 @@ class Scrapper:
     #                         {
     #                             '$eq': [
     #                                 {
-    #                                     '$type': "$domain_use_for.amazon_product_check_service.affiliate_ids"
+    #                                     '$type': "$domain_use_for.amazon_products_check_service.affiliate_ids"
     #                                 },
     #                                 'array'
     #                             ]
     #                         },
     #                         {
-    #                             '$in': [ affiliate_id, "$domain_use_for.amazon_product_check_service.affiliate_ids" ]
+    #                             '$in': [ affiliate_id, "$domain_use_for.amazon_products_check_service.affiliate_ids" ]
     #                         }
     #                     ]
     #                 }
