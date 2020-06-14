@@ -275,6 +275,14 @@ class Scrapper:
                                                             'missing'
                                                         ]
                                                     },
+                                                    {
+                                                        "$ne": [
+                                                            {
+                                                                "$type": "$domain_use_for.pages_speed_check_service"
+                                                            },
+                                                            'missing'
+                                                        ]
+                                                    },
                                                 ]
                                             }
                                         ]
@@ -658,7 +666,7 @@ class Scrapper:
                 page_response = await page_instance.goto( goto_url )
                 page_status = page_response.status
                 
-                if str( page_status ) == '200' or str( page_status ) == '304':
+                if str( page_status ) and str(page_status)[0] in ['2', '3']:  # check if status code 2xx or 3xx
                     # page_headers = page_response.headers
                     page_content = await page_instance.content()
                     page_content_compressed = zlib.compress( page_content.encode(), 5 )
@@ -690,7 +698,7 @@ class Scrapper:
                 page_response = await page_instance.goto( goto_url )
                 page_status = page_response.status
                 
-                if str( page_status ) == '200':
+                if str( page_status ) and str(page_status)[0] in ['2', '3']:  # check if status code 2xx or 3xx :
                     # page_headers = page_response.headers
                     page_content = await page_instance.content()
                     page_content_compressed = zlib.compress( page_content.encode(), 5 )
@@ -776,6 +784,14 @@ class Scrapper:
                                         "$and": [
                                             {
                                                 "$eq": [ "$$id", "$page_id" ]
+                                            },
+                                            {
+                                                "$ne": [
+                                                    {
+                                                        "$type": '$compressed_content'
+                                                    },
+                                                    'missing'
+                                                ]
                                             }
                                         ]
                                         
@@ -886,7 +902,11 @@ class Scrapper:
                     
                     # print( parse.urlparse( joined_url ) )
                 
-                if 'broken_links_check_service' in domain_use_for or 'amazon_products_check_service' in domain_use_for:
+                if \
+                    'broken_links_check_service' in domain_use_for \
+                        or 'amazon_products_check_service' in domain_use_for \
+                        or 'pages_speed_check_service' in domain_use_for \
+                    :
                     for inbound_link in inbound_links:
                         await self.__pages.update_one(
                             {
@@ -1182,6 +1202,14 @@ class Scrapper:
                                         "$and": [
                                             {
                                                 "$eq": [ "$$id", "$amazon_product_id" ]
+                                            },
+                                            {
+                                                "$ne": [
+                                                    {
+                                                        "$type": '$compressed_content'
+                                                    },
+                                                    'missing'
+                                                ]
                                             }
                                         ]
                                         
