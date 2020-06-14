@@ -217,8 +217,8 @@ class Scrapper:
         
         await asyncio.gather(
             self.__side_works(),
-            self.__do_before_scraping(),
-            self.__do_scraping(),
+            # self.__do_before_scraping(),
+            # self.__do_scraping(),
             self.__do_after_scraping(),
             self.__do_side_by_side_works()
         )
@@ -666,7 +666,7 @@ class Scrapper:
                 page_response = await page_instance.goto( goto_url )
                 page_status = page_response.status
                 
-                if str( page_status ) and str(page_status)[0] in ['2', '3']:  # check if status code 2xx or 3xx
+                if str( page_status ) and str( page_status )[ 0 ] in [ '2', '3' ]:  # check if status code 2xx or 3xx
                     # page_headers = page_response.headers
                     page_content = await page_instance.content()
                     page_content_compressed = zlib.compress( page_content.encode(), 5 )
@@ -698,7 +698,7 @@ class Scrapper:
                 page_response = await page_instance.goto( goto_url )
                 page_status = page_response.status
                 
-                if str( page_status ) and str(page_status)[0] in ['2', '3']:  # check if status code 2xx or 3xx :
+                if str( page_status ) and str( page_status )[ 0 ] in [ '2', '3' ]:  # check if status code 2xx or 3xx :
                     # page_headers = page_response.headers
                     page_content = await page_instance.content()
                     page_content_compressed = zlib.compress( page_content.encode(), 5 )
@@ -886,21 +886,37 @@ class Scrapper:
                     parsed_page_base = parse.urlparse( page[ 'url' ] )
                     parsed_joined_url = parse.urlparse( joined_url )
                     
-                    if parsed_page_base[ 0 ] == parsed_joined_url[ 0 ] and parsed_page_base[ 1 ] == parsed_joined_url[
-                        1 ]:
-                        inbound_links.append(
-                            {
-                                'link': joined_url
-                            }
-                        )
-                    else:
-                        outbound_links.append(
-                            {
-                                'link': raw_link[ 'href' ]
-                            }
-                        )
-                    
-                    # print( parse.urlparse( joined_url ) )
+                    if parsed_joined_url[ 0 ] in [ 'http', 'https' ] and parsed_joined_url[ 1 ]:
+                        final_url = parse.urlunparse( (
+                            parsed_joined_url.scheme,
+                            parsed_joined_url.netloc,
+                            parsed_joined_url.path,
+                            '',
+                            '',
+                            ''
+                        ) )
+                        
+                        if parsed_page_base[ 0 ] == parsed_joined_url[ 0 ] and parsed_page_base[ 1 ] == \
+                            parsed_joined_url[ 1 ]:
+                            if {
+                                'link': final_url
+                            } not in inbound_links:
+                                inbound_links.append(
+                                    {
+                                        'link': final_url
+                                    }
+                                )
+                        else:
+                            if {
+                                'link': final_url
+                            } not in outbound_links:
+                                outbound_links.append(
+                                    {
+                                        'link': final_url
+                                    }
+                                )
+                        
+                        # print( parse.urlparse( joined_url ) )
                 
                 if \
                     'broken_links_check_service' in domain_use_for \
