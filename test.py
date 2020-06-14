@@ -50,8 +50,3 @@
 # print(p.query)
 # print(parse.parse_qs(p.query))
 # print(tldextract.extract('am.com.bd/as/a?a').domain)
-
-import pyping
-
-print(pyping.ping())
-

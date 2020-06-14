@@ -1,14 +1,20 @@
+import os
 import asyncio
 from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo.collection import ReturnDocument
-from datetime import datetime
+
 from pyppeteer import launch
-import zlib
 from urllib import parse
 import tldextract
 from bs4 import BeautifulSoup
-import random
+import zlib
+
 import time
+from datetime import datetime
+
+from dotenv import load_dotenv
+
+load_dotenv()
 
 
 class Scrapper:
@@ -19,8 +25,8 @@ class Scrapper:
         asyncio.get_event_loop().run_until_complete( self.__run_main() )  # init main actions
     
     def __init_variables( self ):
-        self.__browser_instance_limit = 1
-        self.__page_instance_limit = 2  # must start 2 or above
+        self.__browser_instance_limit = int( os.getenv( 'INITIAL_BROWSER_LIMIT' ) )
+        self.__page_instance_limit = int( os.getenv( 'INITIAL_PAGE_LIMIT_FOR_EACH_BROWSER' ) )  # must start 2 or above
         self.__urls_are_set_into_page_instances = False
         
         self.__browser_instances = { }
@@ -32,7 +38,8 @@ class Scrapper:
         asyncio.get_event_loop().run_until_complete( self.__get_process_instance_id() )
     
     def __connect_db( self ):
-        self.__db_connection = AsyncIOMotorClient()
+        self.__db_connection = AsyncIOMotorClient( os.getenv( 'MONGODB_CONNECTION' ) )
+        
         self.__db = self.__db_connection.amz_watch
         
         self.__process_instances_collection = self.__db.system_process_instances
@@ -112,7 +119,7 @@ class Scrapper:
         while True:
             # if our browser instance is less then the limit then start
             if len( self.__browser_instances ) < self.__browser_instance_limit:
-                temp_browser = await launch( headless=False )
+                temp_browser = await launch( headless=True, args=[ '--no-sandbox' ] )
                 # temp_browser = 'temp_browser'
                 browser_id = await self.__get_browser_instance_id()
                 
@@ -123,7 +130,7 @@ class Scrapper:
                 
                 print( 'Created browser instance -----> ' + browser_id )
             
-            await asyncio.sleep( 1 )
+            await asyncio.sleep( int( os.getenv( 'SLEEP_TIME' ) ) )
     
     async def __get_browser_instance_id( self ):
         browser_instance_id = await self.__browser_instances_collection.insert_one( {
@@ -140,7 +147,7 @@ class Scrapper:
             if len( self.__browser_instances ) > self.__browser_instance_limit:
                 await self.__close_a_browser_instance()
             
-            await asyncio.sleep( 3 )
+            await asyncio.sleep( int( os.getenv( 'SLEEP_TIME' ) ) )
     
     async def __close_a_browser_instance( self, instance_id=None ):
         # handle closing a browser instance forcefully if id present or close randomly
@@ -175,7 +182,7 @@ class Scrapper:
                     
                     print( 'Created page instance -----> ' + page_id )
             
-            await asyncio.sleep( 1 )
+            await asyncio.sleep( int( os.getenv( 'SLEEP_TIME' ) ) )
     
     async def __get_page_instance_id( self, browser_id ):
         page_instance_id = await self.__page_instances_collection.insert_one( {
@@ -194,7 +201,7 @@ class Scrapper:
                 if len( self.__browser_instances[ browser ][ 'pages' ] ) > self.__page_instance_limit:
                     await self.__close_a_page_instance( browser )
             
-            await asyncio.sleep( 3 )
+            await asyncio.sleep( int( os.getenv( 'SLEEP_TIME' ) ) )
     
     async def __close_a_page_instance( self, browser_id, page_id=None ):
         # handle randomly close a page by browser or forcefully by page_id for that browser
@@ -212,7 +219,8 @@ class Scrapper:
             self.__side_works(),
             self.__do_before_scraping(),
             self.__do_scraping(),
-            self.__do_after_scraping()
+            self.__do_after_scraping(),
+            self.__do_side_by_side_works()
         )
     
     async def __side_works( self ):
@@ -351,7 +359,7 @@ class Scrapper:
                     upsert=True
                 )
             
-            await asyncio.sleep( 3 )
+            await asyncio.sleep( int( os.getenv( 'SLEEP_TIME' ) ) )
     
     async def __assign_guest_post_url_to_pages( self ):
         while True:
@@ -445,7 +453,7 @@ class Scrapper:
                     }
                 )
             
-            await asyncio.sleep( 3 )
+            await asyncio.sleep( int( os.getenv( 'SLEEP_TIME' ) ) )
     
     async def __do_before_scraping( self ):
         await asyncio.gather(
@@ -535,7 +543,7 @@ class Scrapper:
                 
                 self.__urls_are_set_into_page_instances = True
             
-            await asyncio.sleep( 1 )
+            await asyncio.sleep( int( os.getenv( 'SLEEP_TIME' ) ) )
     
     def __assign_pages_into_instances( self, url, scrape_type, other_info ):
         # assign tem cz __browser_instances can be changed anytime
@@ -593,7 +601,7 @@ class Scrapper:
                 
                 self.__urls_are_set_into_page_instances = False
             
-            await asyncio.sleep( 2 )
+            await asyncio.sleep( int( os.getenv( 'SLEEP_TIME' ) ) )
     
     async def __page_scrapper_task( self, page_instance_data, page_id, browser_id ):
         # handle page scrape
@@ -651,7 +659,7 @@ class Scrapper:
                 page_status = page_response.status
                 
                 if str( page_status ) == '200' or str( page_status ) == '304':
-                    page_headers = page_response.headers
+                    # page_headers = page_response.headers
                     page_content = await page_instance.content()
                     page_content_compressed = zlib.compress( page_content.encode(), 5 )
                 
@@ -677,16 +685,16 @@ class Scrapper:
             print( 'Getting product page ----- ' + goto_url + ' -----' )
             
             page_content_compressed = zlib.compress( ''.encode(), 5 )
-
+            
             try:
                 page_response = await page_instance.goto( goto_url )
                 page_status = page_response.status
-
+                
                 if str( page_status ) == '200':
-                    page_headers = page_response.headers
+                    # page_headers = page_response.headers
                     page_content = await page_instance.content()
                     page_content_compressed = zlib.compress( page_content.encode(), 5 )
-
+                
                 await self.__amazon_products.update_one(
                     {
                         "_id": product_page_id
@@ -697,14 +705,14 @@ class Scrapper:
                         }
                     }
                 )
-
+                
                 await self.__update_product_page_meta( product_page_id, page_content_compressed, page_status )
             except:
                 print( 'Something went wrong with page ' + goto_url )
-
+                
                 await self.__update_product_page_meta( product_page_id, page_content_compressed, 999 )
         
-        await asyncio.sleep( 10 )
+        await asyncio.sleep( int( os.getenv( 'SLEEP_TIME' ) ) )
     
     async def __update_page_meta( self, page_id, compressed_content, status ):
         await self.__pages_meta.update_one(
@@ -980,7 +988,7 @@ class Scrapper:
                     }
                 )
             
-            await asyncio.sleep( 3 )
+            await asyncio.sleep( int( os.getenv( 'SLEEP_TIME' ) ) )
     
     async def __get_domain_use_for_from_domain_id( self, domain_id ):
         pipeline = [
@@ -1251,7 +1259,7 @@ class Scrapper:
                     }
                 )
             
-            await asyncio.sleep( 3 )
+            await asyncio.sleep( int( os.getenv( 'SLEEP_TIME' ) ) )
     
     async def __check_links_in_guest_posts( self ):
         print( 'Links in guest post checking started...' )
@@ -1363,8 +1371,15 @@ class Scrapper:
                         }
                     )
             
-            await asyncio.sleep( 3 )
-            
+            await asyncio.sleep( int( os.getenv( 'SLEEP_TIME' ) ) )
+    
+    async def __do_side_by_side_works( self ):
+        print( 'Starting side by side working instances' )
+        
+        # await asyncio.gather(
+        #
+        # )
+    
     # async def __check_domain_uptime( self ):
     #     print('Domain Uptime check started...')
     #     user_agent = {
@@ -1378,37 +1393,6 @@ class Scrapper:
     #
     #         async for user_domain in self.__users_domains.aggregate(pipeline):
     #             print(user_domain)
-    
-    # async def __check_for_affiliate_id_exist( self, affiliate_id ):
-    #     pipeline = [
-    #         {
-    #             "$match": {
-    #                 "$expr": {
-    #                     "$and": [
-    #                         {
-    #                             '$eq': [
-    #                                 {
-    #                                     '$type': "$domain_use_for.amazon_products_check_service.affiliate_ids"
-    #                                 },
-    #                                 'array'
-    #                             ]
-    #                         },
-    #                         {
-    #                             '$in': [ affiliate_id, "$domain_use_for.amazon_products_check_service.affiliate_ids" ]
-    #                         }
-    #                     ]
-    #                 }
-    #             }
-    #         },
-    #         {
-    #             '$limit': 1
-    #         }
-    #     ]
-    #
-    #     async for user_domain in self.__users_domains.aggregate( pipeline ):
-    #         return True
-    #
-    #     return False
 
 
 print( 'Initiating Process' )

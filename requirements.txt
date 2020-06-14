@@ -13,7 +13,8 @@ motor==2.1.0
 multidict==4.7.5
 pyee==7.0.1
 pymongo==3.10.1
-pyppeteer2 @ git+https://github.com/pyppeteer/pyppeteer2@d43f10c4946ab365e342ee1ec8131127c2f174fd
+pyppeteer==0.2.2
+python-dotenv==0.13.0
 requests==2.23.0
 requests-file==1.5.1
 six==1.14.0
