@@ -17,6 +17,10 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+def now_time():
+    return str( int( time.time() * 1000 ) )
+
+
 class Scrapper:
     def __init__( self ):
         self.__init_variables()  # load & initiate variables
@@ -217,8 +221,8 @@ class Scrapper:
         
         await asyncio.gather(
             self.__side_works(),
-            # self.__do_before_scraping(),
-            # self.__do_scraping(),
+            self.__do_before_scraping(),
+            self.__do_scraping(),
             self.__do_after_scraping(),
             self.__do_side_by_side_works()
         )
@@ -360,14 +364,14 @@ class Scrapper:
                     {
                         "$set": {
                             "updated_at": {
-                                "domain_url_in_page_last_check_at": str( time.time_ns() )
+                                "domain_url_in_page_last_check_at": now_time()
                             }
                         }
                     },
                     upsert=True
                 )
             
-            await asyncio.sleep( int( os.getenv( 'SLEEP_TIME' ) ) )
+            await asyncio.sleep( int( os.getenv( 'SLEEP_TIME' ) ) + 10 )
     
     async def __assign_guest_post_url_to_pages( self ):
         while True:
@@ -456,12 +460,12 @@ class Scrapper:
                     },
                     {
                         "$set": {
-                            "updated_at.guest_post_url_in_page_last_checked_at": str( time.time_ns() )
+                            "updated_at.guest_post_url_in_page_last_checked_at": now_time()
                         }
                     }
                 )
             
-            await asyncio.sleep( int( os.getenv( 'SLEEP_TIME' ) ) )
+            await asyncio.sleep( int( os.getenv( 'SLEEP_TIME' ) ) + 5 )
     
     async def __do_before_scraping( self ):
         await asyncio.gather(
@@ -482,6 +486,26 @@ class Scrapper:
                     {
                         "$match": {
                             "$expr": {
+                                "$and": [
+                                    {
+                                        "$lt": [
+                                            {
+                                                "$sum": [
+                                                    {
+                                                        "$convert": {
+                                                            "input"  : '$updated_at.last_scraped_at',
+                                                            "to"     : 'double',
+                                                            "onError": 0,
+                                                            "onNull" : 0
+                                                        }
+                                                    },
+                                                    3600 * 1000
+                                                ]
+                                            },
+                                            int( time.time() * 1000 )
+                                        ]
+                                    }
+                                ]
                                 # handle status & other match
                             }
                         }
@@ -512,6 +536,26 @@ class Scrapper:
                         {
                             "$match": {
                                 "$expr": {
+                                    "$and": [
+                                        {
+                                            "$lt": [
+                                                {
+                                                    "$sum": [
+                                                        {
+                                                            "$convert": {
+                                                                "input"  : '$updated_at.last_scraped_at',
+                                                                "to"     : 'double',
+                                                                "onError": 0,
+                                                                "onNull" : 0
+                                                            }
+                                                        },
+                                                        3600 * 1000
+                                                    ]
+                                                },
+                                                int( time.time() * 1000 )
+                                            ]
+                                        }
+                                    ]
                                     # handle status & other match
                                 }
                             }
@@ -677,7 +721,7 @@ class Scrapper:
                     },
                     {
                         "$set": {
-                            "updated_at.last_scraped_at": str( time.time_ns() )
+                            "updated_at.last_scraped_at": now_time()
                         }
                     }
                 )
@@ -709,7 +753,7 @@ class Scrapper:
                     },
                     {
                         "$set": {
-                            "updated_at.last_scraped_at": str( time.time_ns() )
+                            "updated_at.last_scraped_at": now_time()
                         }
                     }
                 )
@@ -808,6 +852,24 @@ class Scrapper:
                         "$expr": {
                             "$and": [
                                 {
+                                    "$lt": [
+                                        {
+                                            "$sum": [
+                                                {
+                                                    "$convert": {
+                                                        "input"  : '$updated_at.last_parsed_at',
+                                                        "to"     : 'double',
+                                                        "onError": 0,
+                                                        "onNull" : 0
+                                                    }
+                                                },
+                                                3600 * 1000
+                                            ]
+                                        },
+                                        int( time.time() * 1000 )
+                                    ]
+                                },
+                                {
                                     "$gt": [ {
                                         "$size": "$page_meta"
                                     }, 0 ]
@@ -849,7 +911,7 @@ class Scrapper:
                 
                 {
                     "$sort": {
-                        "updated_at.last_scraped_at": 1
+                        "updated_at.last_parsed_at": 1
                     }
                 },
                 {
@@ -934,7 +996,7 @@ class Scrapper:
                                     'domain_id' : str( page[ 'domain' ][ 0 ][ '_id' ] ),
                                     'url'       : inbound_link[ 'link' ],
                                     'updated_at': {
-                                        'last_scraped_at': str( time.time_ns() )
+                                        'last_scraped_at': "2"
                                     }
                                 }
                             },
@@ -1019,7 +1081,7 @@ class Scrapper:
                     },
                     {
                         '$set': {
-                            'updated_at.last_parsed_at': str( time.time_ns() )
+                            'updated_at.last_parsed_at': now_time()
                         }
                     }
                 )
@@ -1220,6 +1282,24 @@ class Scrapper:
                                                 "$eq": [ "$$id", "$amazon_product_id" ]
                                             },
                                             {
+                                                "$lt": [
+                                                    {
+                                                        "$sum": [
+                                                            {
+                                                                "$convert": {
+                                                                    "input"  : '$updated_at.last_parsed_at',
+                                                                    "to"     : 'double',
+                                                                    "onError": 0,
+                                                                    "onNull" : 0
+                                                                }
+                                                            },
+                                                            3600 * 1000
+                                                        ]
+                                                    },
+                                                    int( time.time() * 1000 )
+                                                ]
+                                            },
+                                            {
                                                 "$ne": [
                                                     {
                                                         "$type": '$compressed_content'
@@ -1253,7 +1333,7 @@ class Scrapper:
                 
                 {
                     "$sort": {
-                        "updated_at.last_scraped_at": 1
+                        "updated_at.last_parsed_at": 1
                     }
                 },
                 {
@@ -1286,7 +1366,7 @@ class Scrapper:
                     },
                     {
                         '$set': {
-                            'updated_at.last_parsed_at': str( time.time_ns() )
+                            'updated_at.last_parsed_at': now_time()
                         }
                     }
                 )
@@ -1398,7 +1478,7 @@ class Scrapper:
                         {
                             '$set': {
                                 'link_infos.exists'              : '1',
-                                'updated_at.link_last_checked_at': str( time.time_ns() )
+                                'updated_at.link_last_checked_at': now_time()
                             }
                         }
                     )
@@ -1410,7 +1490,7 @@ class Scrapper:
                         {
                             '$set': {
                                 'link_infos.exists'              : '0',
-                                'updated_at.link_last_checked_at': str( time.time_ns() )
+                                'updated_at.link_last_checked_at': now_time()
                             }
                         }
                     )
