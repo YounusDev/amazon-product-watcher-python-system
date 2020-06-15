@@ -379,7 +379,23 @@ class Scrapper:
                 {
                     "$match": {
                         "$expr": {
-                            "$and": [
+                            "$or": [
+                                {
+                                    "$eq": [
+                                        {
+                                            "$type": "$updated_at"
+                                        },
+                                        'missing'
+                                    ]
+                                },
+                                {
+                                    "$eq": [
+                                        {
+                                            "$type": "$updated_at.guest_post_url_in_page_last_checked_at"
+                                        },
+                                        'missing'
+                                    ]
+                                },
                                 {
                                     "$eq": [ "$updated_at.guest_post_url_in_page_last_checked_at", "1" ]
                                 }
@@ -991,9 +1007,10 @@ class Scrapper:
                         # print( parse.urlparse( joined_url ) )
                 
                 if \
-                    'broken_links_check_service' in domain_use_for \
-                        or 'amazon_products_check_service' in domain_use_for \
-                        or 'pages_speed_check_service' in domain_use_for \
+                    domain_use_for and \
+                        ('broken_links_check_service' in domain_use_for \
+                         or 'amazon_products_check_service' in domain_use_for \
+                         or 'pages_speed_check_service' in domain_use_for) \
                     :
                     for inbound_link in inbound_links:
                         await self.__pages.update_one(
@@ -1013,7 +1030,7 @@ class Scrapper:
                             upsert=True
                         )
                 
-                if 'amazon_products_check_service' in domain_use_for:
+                if domain_use_for and 'amazon_products_check_service' in domain_use_for:
                     for outbound_link in outbound_links:
                         if tldextract.extract( outbound_link[ 'link' ] ).domain == 'amazon':
                             parsed_outbound_url = parse.urlparse( outbound_link[ 'link' ] )
@@ -1505,7 +1522,7 @@ class Scrapper:
                         }
                     )
             
-            await asyncio.sleep( int( os.getenv( 'SLEEP_TIME' ) ) )
+            await asyncio.sleep( int( os.getenv( 'SLEEP_TIME' ) ) + 5 )
     
     async def __do_side_by_side_works( self ):
         print( 'Starting side by side working instances' )
