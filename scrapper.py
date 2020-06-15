@@ -715,20 +715,13 @@ class Scrapper:
                     page_content = await page_instance.content()
                     page_content_compressed = zlib.compress( page_content.encode(), 5 )
                 
-                await self.__pages.update_one(
-                    {
-                        "_id": page_id
-                    },
-                    {
-                        "$set": {
-                            "updated_at.last_scraped_at": now_time()
-                        }
-                    }
-                )
+                await self.__update_page_scraped_time( page_id )
                 
                 await self.__update_page_meta( page_id, page_content_compressed, page_status )
             except:
                 print( 'Something went wrong with page ' + goto_url )
+                
+                await self.__update_page_scraped_time( page_id )
                 
                 await self.__update_page_meta( page_id, page_content_compressed, 999 )
         else:
@@ -747,24 +740,29 @@ class Scrapper:
                     page_content = await page_instance.content()
                     page_content_compressed = zlib.compress( page_content.encode(), 5 )
                 
-                await self.__amazon_products.update_one(
-                    {
-                        "_id": product_page_id
-                    },
-                    {
-                        "$set": {
-                            "updated_at.last_scraped_at": now_time()
-                        }
-                    }
-                )
+                await self.__update_product_page_scraped_time( product_page_id )
                 
                 await self.__update_product_page_meta( product_page_id, page_content_compressed, page_status )
             except:
                 print( 'Something went wrong with page ' + goto_url )
                 
+                await self.__update_product_page_scraped_time( product_page_id )
+                
                 await self.__update_product_page_meta( product_page_id, page_content_compressed, 999 )
         
         await asyncio.sleep( int( os.getenv( 'SLEEP_TIME' ) ) )
+    
+    async def __update_page_scraped_time( self, page_id ):
+        await self.__pages.update_one(
+            {
+                "_id": page_id
+            },
+            {
+                "$set": {
+                    "updated_at.last_scraped_at": now_time()
+                }
+            }
+        )
     
     async def __update_page_meta( self, page_id, compressed_content, status ):
         await self.__pages_meta.update_one(
@@ -779,6 +777,18 @@ class Scrapper:
                 }
             },
             upsert=True
+        )
+    
+    async def __update_product_page_scraped_time( self, product_page_id ):
+        await self.__amazon_products.update_one(
+            {
+                "_id": product_page_id
+            },
+            {
+                "$set": {
+                    "updated_at.last_scraped_at": now_time()
+                }
+            }
         )
     
     async def __update_product_page_meta( self, product_page_id, compressed_content, status ):
