@@ -936,6 +936,10 @@ class Scrapper:
                 },
                 
                 {
+                    "$unwind": '$domain'
+                },
+                
+                {
                     "$sort": {
                         "updated_at.last_parsed_at": 1
                     }
@@ -969,7 +973,7 @@ class Scrapper:
                     # urljoin('http://some/more/', '/thing')
                     # 'http://some/thin
                     
-                    joined_url = parse.urljoin( page[ 'domain' ][ 0 ][ 'url' ], raw_link[ 'href' ] )
+                    joined_url = parse.urljoin( page[ 'domain' ][ 'url' ], raw_link[ 'href' ] )
                     
                     parsed_page_base = parse.urlparse( page[ 'url' ] )
                     parsed_joined_url = parse.urlparse( joined_url )
@@ -1015,12 +1019,12 @@ class Scrapper:
                     for inbound_link in inbound_links:
                         await self.__pages.update_one(
                             {
-                                'domain_id': str( page[ 'domain' ][ 0 ][ '_id' ] ),
+                                'domain_id': str( page[ 'domain' ][ '_id' ] ),
                                 'url'      : inbound_link[ 'link' ]
                             },
                             {
                                 '$setOnInsert': {
-                                    'domain_id' : str( page[ 'domain' ][ 0 ][ '_id' ] ),
+                                    'domain_id' : str( page[ 'domain' ][ '_id' ] ),
                                     'url'       : inbound_link[ 'link' ],
                                     'updated_at': {
                                         'last_scraped_at': "2"
