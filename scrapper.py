@@ -527,14 +527,14 @@ class Scrapper:
                                 }
                             }
                         ],
-                        "as": "user_domain",
+                        "as": "user_domains",
                     }
                 },
-                {"$unwind": "$user_domain"},
                 {
                     "$match": {
                         "$expr": {
                             "$and": [
+                                {"$gt": [{"$size": "$user_domains"}, 0]},
                                 {
                                     "$lt": [
                                         {
@@ -552,7 +552,7 @@ class Scrapper:
                                         },
                                         now_time_integer(),
                                     ]
-                                }
+                                },
                             ]
                         }
                     }
@@ -567,17 +567,15 @@ class Scrapper:
 
             head_req_list = []
 
-            async for l in self.__pages_outbound_links.aggregate(pipeline):
-                # print(l)
-
+            async for link in self.__pages_outbound_links.aggregate(pipeline):
                 head_req_list.append(
-                    self.head_request_for_is_product_page_check(l["url"], l)
+                    self.head_request_for_is_product_page_check(link["url"], link)
                 )
 
             if len(head_req_list):
                 await asyncio.gather(*head_req_list)
 
-            await asyncio.sleep(int(os.getenv("SLEEP_TIME")) + 3)
+            await asyncio.sleep(int(os.getenv("SLEEP_TIME")) + 5)
 
     async def head_request_for_is_product_page_check(self, url, url_obj):
         # currently can't req for head for these https://amzn.to/2Jv8ICC
@@ -613,22 +611,25 @@ class Scrapper:
                             return_document=ReturnDocument.AFTER,
                         )
 
-                        await self.__amazon_products_in_pages.update_one(
-                            {
-                                "product_id": str(product["_id"]),
-                                "page_id": url_obj["page_id"],
-                                "original_url": url,
-                            },
-                            {
-                                "$setOnInsert": {
+                        for user_domain in url_obj["user_domains"]:
+                            await self.__amazon_products_in_pages.update_one(
+                                {
                                     "product_id": str(product["_id"]),
                                     "page_id": url_obj["page_id"],
+                                    "user_domain_id": str(user_domain["_id"]),
                                     "original_url": url,
                                 },
-                                "$set": {"actual_product_url": final_url,},
-                            },
-                            upsert=True,
-                        )
+                                {
+                                    "$setOnInsert": {
+                                        "product_id": str(product["_id"]),
+                                        "page_id": url_obj["page_id"],
+                                        "user_domain_id": str(user_domain["_id"]),
+                                        "original_url": url,
+                                    },
+                                    "$set": {"actual_product_url": final_url,},
+                                },
+                                upsert=True,
+                            )
 
                     await self.__pages_outbound_links.update_one(
                         {"_id": url_obj["_id"]},
@@ -1000,7 +1001,7 @@ class Scrapper:
         await asyncio.gather(
             self.__parse_page(),
             self.__parse_product_page(),
-            # self.__check_links_in_guest_posts()
+            self.__check_links_in_guest_posts(),
         )
 
     async def __parse_page(self):
@@ -1056,7 +1057,7 @@ class Scrapper:
                                                 3600 * 1000,
                                             ]
                                         },
-                                        int(time.time() * 1000),
+                                        now_time_integer(),
                                     ]
                                 },
                                 {"$gt": [{"$size": "$page_meta"}, 0]},
@@ -1341,24 +1342,6 @@ class Scrapper:
                                         "$and": [
                                             {"$eq": ["$$id", "$amazon_product_id"]},
                                             {
-                                                "$lt": [
-                                                    {
-                                                        "$sum": [
-                                                            {
-                                                                "$convert": {
-                                                                    "input": "$updated_at.last_parsed_at",
-                                                                    "to": "double",
-                                                                    "onError": 0,
-                                                                    "onNull": 0,
-                                                                }
-                                                            },
-                                                            3600 * 1000,
-                                                        ]
-                                                    },
-                                                    int(time.time() * 1000),
-                                                ]
-                                            },
-                                            {
                                                 "$ne": [
                                                     {"$type": "$compressed_content"},
                                                     "missing",
@@ -1375,7 +1358,27 @@ class Scrapper:
                 {
                     "$match": {
                         "$expr": {
-                            "$and": [{"$gt": [{"$size": "$product_page_meta"}, 0]}]
+                            "$and": [
+                                {
+                                    "$lt": [
+                                        {
+                                            "$sum": [
+                                                {
+                                                    "$convert": {
+                                                        "input": "$updated_at.last_parsed_at",
+                                                        "to": "double",
+                                                        "onError": 0,
+                                                        "onNull": 0,
+                                                    }
+                                                },
+                                                3600 * 1000,
+                                            ]
+                                        },
+                                        now_time_integer(),
+                                    ]
+                                },
+                                {"$gt": [{"$size": "$product_page_meta"}, 0]},
+                            ]
                         }
                     }
                 },
@@ -1393,16 +1396,27 @@ class Scrapper:
                     features="lxml",
                 )
 
-                product_title = content.head.title.text
-
                 try:
+                    product_title = content.head.title.text
+
                     product_image = (
                         content.find("div", {"id": "main-image-container"})
                         .find("li", {"class", "image"})
                         .find("img")["src"]
                     )
                 except:
+                    product_title = ""
                     product_image = ""
+
+                    await self.__amazon_products_meta.update_one(
+                        {"amazon_product_id": str(product_page["_id"])},
+                        {
+                            "$set": {
+                                "amazon_product_id": str(product_page["_id"]),
+                                "page_status": 999,
+                            }
+                        },
+                    )
 
                 # print( product_image )
 
