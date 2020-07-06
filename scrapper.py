@@ -583,7 +583,9 @@ class Scrapper:
 
         print("Checking " + url + " for product page")
 
-        async with aiohttp.ClientSession() as aiohttp_session:
+        async with aiohttp.ClientSession(
+            connector=aiohttp.TCPConnector(ssl=False)
+        ) as aiohttp_session:
             async with aiohttp_session.get(
                 url, allow_redirects=True, headers=self.__req_header
             ) as res:
