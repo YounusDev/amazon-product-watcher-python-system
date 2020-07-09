@@ -660,11 +660,11 @@ class Scrapper:
         while True:
             if not self.__urls_are_set_into_page_instances:
                 # we r safe cz if limit changes midway no harm for this block
+                print("getting pages & products for scraping")
+
                 get_pages_upto = (
                     self.__browser_instance_limit * self.__page_instance_limit
                 )
-
-                print("getting pages & products for scraping")
 
                 pipeline_for_product_pages = [
                     {
@@ -771,8 +771,6 @@ class Scrapper:
                             page["page"]["url"], "normal_page", page
                         )
 
-                    # print(page)
-
                 self.__urls_are_set_into_page_instances = True
 
             await asyncio.sleep(int(os.getenv("SLEEP_TIME")))
@@ -789,6 +787,7 @@ class Scrapper:
                     == "false"
                     and self.__browser_instances[browser]
                     and self.__browser_instances[browser]["pages"][page]
+                    and not self.__check_url_if_already_has_in_instances(url)
                 ):
                     self.__browser_instances[browser]["pages"][page]["info"] = {
                         "url": url,
@@ -802,6 +801,21 @@ class Scrapper:
                     # assign to page_instance_urls if track url
 
                     return  # it will break from parents also
+
+    def __check_url_if_already_has_in_instances(self, url):
+        # check if url has in instance_container
+        for browser in self.__browser_instances:
+            for page in self.__browser_instances[browser]["pages"]:
+                if (
+                    self.__browser_instances[browser]
+                    and self.__browser_instances[browser]["pages"][page]
+                    and self.__browser_instances[browser]["pages"][page]["info"]
+                    and self.__browser_instances[browser]["pages"][page]["info"]["url"]
+                    == url
+                ):
+                    return True
+
+        return False
 
     async def __do_scraping(self):
         await asyncio.gather(self.__start_scrapping())
@@ -958,7 +972,9 @@ class Scrapper:
                     product_page_id, page_content_compressed, 999
                 )
 
-        await asyncio.sleep(int(os.getenv("SLEEP_TIME")))
+        print("Done page ----- " + goto_url + " -----")
+
+        # await asyncio.sleep(int(os.getenv("SLEEP_TIME")))
 
     async def __update_page_scraped_time(self, page_id):
         await self.__pages.update_one(
@@ -1011,6 +1027,8 @@ class Scrapper:
         print("Page parsing started...")
 
         while True:
+            print("Getting pages for parsing...")
+
             pipeline = [
                 {
                     "$lookup": {
@@ -1328,6 +1346,8 @@ class Scrapper:
         print("Product page parsing started...")
 
         while True:
+            print("Getting products for parsing...")
+
             pipeline = [
                 {
                     "$lookup": {
