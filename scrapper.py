@@ -3,6 +3,7 @@ import asyncio
 from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo.collection import ReturnDocument
 import aiohttp
+import pprint
 
 from pyppeteer import launch
 from urllib import parse
@@ -52,6 +53,8 @@ class Scrapper:
             ),
         }
 
+        self.__pages_hanged_browsers = []  # keep browser list if a page hang
+
     def __init_actions(self):
         self.__connect_db()
 
@@ -67,15 +70,10 @@ class Scrapper:
         self.__browser_instances_collection = self.__db.system_browser_instances
         self.__page_instances_collection = self.__db.system_page_instances
         self.__users_domains = self.__db.users_domains
-        self.__domains = self.__db.domains
         self.__pages = self.__db.pages
         self.__pages_meta = self.__db.pages_meta
-        self.__pages_inbound_links = self.__db.pages_inbound_links
-        self.__pages_outbound_links = self.__db.pages_outbound_links
         self.__amazon_products = self.__db.amazon_products
         self.__amazon_products_meta = self.__db.amazon_products_meta
-        self.__amazon_products_in_pages = self.__db.amazon_products_in_pages
-        self.__links_in_guest_posts = self.__db.links_in_guest_posts
 
     async def __get_process_instance_id(self):
         # save instance info when script run
@@ -138,7 +136,7 @@ class Scrapper:
         while True:
             # if our browser instance is less then the limit then start
             if len(self.__browser_instances) < self.__browser_instance_limit:
-                temp_browser = await launch(headless=True, args=["--no-sandbox"])
+                temp_browser = await launch(headless=True, args=["--no-sandbox"],)
                 # temp_browser = 'temp_browser'
                 browser_id = await self.__get_browser_instance_id()
 
@@ -244,412 +242,8 @@ class Scrapper:
         print("Starting scrapper working instances")
 
         await asyncio.gather(
-            self.__side_works(),
-            self.__do_before_scraping(),
-            self.__do_scraping(),
-            self.__do_after_scraping(),
-            self.__do_side_by_side_works(),
+            self.__do_before_scraping(), self.__do_scraping(),
         )
-
-    async def __side_works(self):
-        # handle side works. its for scrape help
-        await asyncio.gather(
-            self.__assign_domain_url_to_pages(),
-            self.__assign_guest_post_url_to_pages(),
-            self.__check_and_assign_to_tables_if_outbound_link_is_product_page(),
-        )
-
-    async def __assign_domain_url_to_pages(self):
-        # it will take domain url & assign to pages collection for scrape if not has in there
-        # no need to assign guest domain url
-        while True:
-            pipeline = [
-                {
-                    "$lookup": {
-                        "from": "users_domains",
-                        "let": {
-                            # in let get parent vars
-                            "id": {"$toString": "$_id"}
-                        },
-                        "pipeline": [
-                            {
-                                "$match": {
-                                    # use $$ to use the let var & $ to use lookups collection
-                                    "$expr": {
-                                        "$and": [
-                                            {"$eq": ["$$id", "$domain_id"]},
-                                            {
-                                                "$or": [
-                                                    # if need with status wrap each with $and & check status also
-                                                    {
-                                                        "$ne": [
-                                                            {
-                                                                "$type": "$domain_use_for.broken_links_check_service"
-                                                            },
-                                                            "missing",
-                                                        ]
-                                                    },
-                                                    {
-                                                        "$ne": [
-                                                            {
-                                                                "$type": "$domain_use_for.amazon_products_check_service"
-                                                            },
-                                                            "missing",
-                                                        ]
-                                                    },
-                                                    {
-                                                        "$ne": [
-                                                            {
-                                                                "$type": "$domain_use_for.pages_speed_check_service"
-                                                            },
-                                                            "missing",
-                                                        ]
-                                                    },
-                                                ]
-                                            },
-                                        ]
-                                    }
-                                },
-                            }
-                        ],
-                        "as": "user_domains",
-                    }
-                },
-                # use unwind if needed. it will generate results by path array
-                # if your result is {a: a, b: [c: c, d: d]}
-                # then unwind result {a: a, b: {c: c}} & {a: a, b: {d: d}}
-                # {
-                #     "$unwind": { "path": "$user_domains" }
-                # },
-                # sort should be applied before limit
-                {
-                    "$match": {
-                        "$expr": {"$and": [{"$gt": [{"$size": "$user_domains"}, 0]}]}
-                    }
-                },
-                # {
-                #     "$project": {
-                #         # reformat parent result
-                #         "user_domains": { '$size': '$user_domains' },
-                #     }
-                # },
-                {"$sort": {"updated_at.domain_url_in_page_last_check_at": 1}},
-                {"$limit": 1},
-            ]
-
-            async for domain in self.__domains.aggregate(pipeline):
-                # print( domain )
-
-                # if need use transaction
-                await self.__pages.update_one(
-                    {"domain_id": str(domain["_id"]), "url": domain["url"]},
-                    {
-                        "$setOnInsert": {
-                            "domain_id": str(domain["_id"]),
-                            "url": domain["url"],
-                            "updated_at": {"last_scraped_at": "1"},
-                        }
-                    },
-                    upsert=True,
-                )
-                await self.__domains.update_one(
-                    {"_id": domain["_id"],},
-                    {
-                        "$set": {
-                            "updated_at": {
-                                "domain_url_in_page_last_check_at": now_time()
-                            }
-                        }
-                    },
-                    upsert=True,
-                )
-
-            await asyncio.sleep(int(os.getenv("SLEEP_TIME")) + 10)
-
-    async def __assign_guest_post_url_to_pages(self):
-        while True:
-            pipeline = [
-                {
-                    "$match": {
-                        "$expr": {
-                            "$or": [
-                                {"$eq": [{"$type": "$updated_at"}, "missing"]},
-                                {
-                                    "$eq": [
-                                        {
-                                            "$type": "$updated_at.guest_post_url_in_page_last_checked_at"
-                                        },
-                                        "missing",
-                                    ]
-                                },
-                                {
-                                    "$eq": [
-                                        "$updated_at.guest_post_url_in_page_last_checked_at",
-                                        "1",
-                                    ]
-                                },
-                            ]
-                        }
-                    }
-                },
-                {
-                    "$lookup": {
-                        "from": "users_domains",
-                        "let": {
-                            # in let get parent vars
-                            "user_domain_id": "$user_domain_id"
-                        },
-                        "pipeline": [
-                            {
-                                "$match": {
-                                    # use $$ to use the let var & $ to use lookups collection
-                                    "$expr": {
-                                        "$and": [
-                                            {
-                                                "$eq": [
-                                                    "$$user_domain_id",
-                                                    {"$toString": "$_id"},
-                                                ]
-                                            },
-                                        ]
-                                    }
-                                },
-                            }
-                        ],
-                        "as": "user_domain",
-                    }
-                },
-                {"$sort": {"updated_at.guest_post_url_in_page_last_checked_at": 1}},
-                {"$limit": 10},
-            ]
-
-            async for guest_post in self.__links_in_guest_posts.aggregate(pipeline):
-                # print(guest_post)
-                service_info = guest_post["user_domain"][0]["domain_use_for"][
-                    "guest_posts_check_service"
-                ]
-                guest_domain_id = service_info["guest_domain_id"]
-                guest_post_url = guest_post["guest_post_url"]
-
-                # if need use transaction
-                await self.__pages.update_one(
-                    {"domain_id": guest_domain_id, "url": guest_post_url},
-                    {
-                        "$setOnInsert": {
-                            "domain_id": guest_domain_id,
-                            "url": guest_post_url,
-                            "updated_at": {"last_scraped_at": "1"},
-                        }
-                    },
-                    upsert=True,
-                )
-
-                await self.__links_in_guest_posts.update_one(
-                    {"_id": guest_post["_id"]},
-                    {
-                        "$set": {
-                            "updated_at.guest_post_url_in_page_last_checked_at": now_time()
-                        }
-                    },
-                )
-
-            await asyncio.sleep(int(os.getenv("SLEEP_TIME")) + 5)
-
-    async def __check_and_assign_to_tables_if_outbound_link_is_product_page(self):
-        while True:
-            print("Getting urls for product page check")
-
-            pipeline = [
-                {
-                    "$lookup": {
-                        "from": "pages",
-                        "let": {"page_id": "$page_id"},
-                        "pipeline": [
-                            {
-                                "$match": {
-                                    "$expr": {
-                                        "$and": [
-                                            {
-                                                "$eq": [
-                                                    "$$page_id",
-                                                    {"$toString": "$_id"},
-                                                ]
-                                            }
-                                        ]
-                                    }
-                                }
-                            }
-                        ],
-                        "as": "page",
-                    }
-                },
-                {"$unwind": "$page"},
-                {
-                    "$lookup": {
-                        "from": "users_domains",
-                        "let": {"domain_id": "$page.domain_id"},
-                        "pipeline": [
-                            {
-                                "$match": {
-                                    "$expr": {
-                                        "$and": [
-                                            {"$eq": ["$$domain_id", "$domain_id"]},
-                                            {
-                                                "$ne": [
-                                                    {"$type": "$domain_use_for"},
-                                                    "missing",
-                                                ]
-                                            },
-                                            {
-                                                "$ne": [
-                                                    {
-                                                        "$type": "$domain_use_for.amazon_products_check_service"
-                                                    },
-                                                    "missing",
-                                                ]
-                                            },
-                                            {
-                                                "$ne": [
-                                                    {
-                                                        "$type": "$domain_use_for.amazon_products_check_service.status"
-                                                    },
-                                                    "missing",
-                                                ]
-                                            },
-                                            {
-                                                "$eq": [
-                                                    "$domain_use_for.amazon_products_check_service.status",
-                                                    "active",
-                                                ]
-                                            },
-                                        ]
-                                    }
-                                }
-                            }
-                        ],
-                        "as": "user_domains",
-                    }
-                },
-                {
-                    "$match": {
-                        "$expr": {
-                            "$and": [
-                                {"$gt": [{"$size": "$user_domains"}, 0]},
-                                {
-                                    "$lt": [
-                                        {
-                                            "$sum": [
-                                                {
-                                                    "$convert": {
-                                                        "input": "$other_info.updated_at.head_request_for_is_product_page_last_checked_at",
-                                                        "to": "double",
-                                                        "onError": 0,
-                                                        "onNull": 0,
-                                                    }
-                                                },
-                                                86400 * 1000,
-                                            ]
-                                        },
-                                        now_time_integer(),
-                                    ]
-                                },
-                            ]
-                        }
-                    }
-                },
-                {
-                    "$sort": {
-                        "other_info.updated_at.head_request_for_is_product_page_last_checked_at": 1
-                    }
-                },
-                {"$limit": 3},
-            ]
-
-            head_req_list = []
-
-            async for link in self.__pages_outbound_links.aggregate(pipeline):
-                head_req_list.append(
-                    self.head_request_for_is_product_page_check(link["url"], link)
-                )
-
-            if len(head_req_list):
-                await asyncio.gather(*head_req_list)
-
-            await asyncio.sleep(int(os.getenv("SLEEP_TIME")) + 5)
-
-    async def head_request_for_is_product_page_check(self, url, url_obj):
-        # currently can't req for head for these https://amzn.to/2Jv8ICC
-        # cz 405 method not allowd giving
-
-        print("Checking " + url + " for product page")
-
-        async with aiohttp.ClientSession(
-            connector=aiohttp.TCPConnector(ssl=False)
-        ) as aiohttp_session:
-            async with aiohttp_session.get(
-                url, allow_redirects=True, headers=self.__req_header
-            ) as res:
-                final_url = str(res.url)
-
-                if str(res.status)[0] in ["2", "3"]:
-                    if tldextract.extract(final_url).domain == "amazon":
-                        parsed_url = parse.urlparse(final_url)
-
-                        only_product_url = parse.urlunparse(
-                            (
-                                parsed_url.scheme,
-                                parsed_url.netloc,
-                                parsed_url.path,
-                                "",
-                                "",
-                                "",
-                            )
-                        )
-
-                        product = await self.__amazon_products.find_one_and_update(
-                            {"url": only_product_url},
-                            {"$setOnInsert": {"url": only_product_url}},
-                            upsert=True,
-                            return_document=ReturnDocument.AFTER,
-                        )
-
-                        for user_domain in url_obj["user_domains"]:
-                            await self.__amazon_products_in_pages.update_one(
-                                {
-                                    "product_id": str(product["_id"]),
-                                    "page_id": url_obj["page_id"],
-                                    "user_domain_id": str(user_domain["_id"]),
-                                    "original_url": url,
-                                },
-                                {
-                                    "$setOnInsert": {
-                                        "product_id": str(product["_id"]),
-                                        "page_id": url_obj["page_id"],
-                                        "user_domain_id": str(user_domain["_id"]),
-                                        "original_url": url,
-                                    },
-                                    "$set": {"actual_product_url": final_url,},
-                                },
-                                upsert=True,
-                            )
-
-                    await self.__pages_outbound_links.update_one(
-                        {"_id": url_obj["_id"]},
-                        {
-                            "$set": {
-                                "other_info.updated_at.head_request_for_is_product_page_last_checked_at": now_time()
-                            }
-                        },
-                    )
-                else:
-                    await self.__pages_outbound_links.update_one(
-                        {"_id": url_obj["_id"]},
-                        {
-                            "$set": {
-                                "other_info.updated_at.head_request_for_is_product_page_last_checked_at": now_time()
-                            }
-                        },
-                    )
 
     async def __do_before_scraping(self):
         await asyncio.gather(self.__get_and_assign_pages_to_instances())
@@ -658,9 +252,13 @@ class Scrapper:
         # get pages from collection by limit then assign these into browser pages
         # if all pages status are false then only run this
         while True:
-            if not self.__urls_are_set_into_page_instances:
+            # pprint.pprint(self.__browser_instances)
+            if (
+                not self.__urls_are_set_into_page_instances
+                and not self.__pages_hanged_browsers
+            ):
                 # we r safe cz if limit changes midway no harm for this block
-                print("getting pages & products for scraping")
+                print("getting pages & products for scraping " + time.ctime())
 
                 get_pages_upto = (
                     self.__browser_instance_limit * self.__page_instance_limit
@@ -848,6 +446,21 @@ class Scrapper:
 
                 await asyncio.gather(*task_list)
 
+                if self.__pages_hanged_browsers:
+                    print("Closing browsers cz a page is hanged")
+
+                    for browser_id in self.__pages_hanged_browsers:
+                        if self.__check_if_browser_instance_present(browser_id):
+                            await self.__browser_instances[browser_id][
+                                "browser"
+                            ].close()
+
+                            del self.__browser_instances[browser_id]
+
+                    self.__pages_hanged_browsers = []
+
+                    print("Closed browsers cz a page is hanged")
+
                 self.__urls_are_set_into_page_instances = False
 
             await asyncio.sleep(int(os.getenv("SLEEP_TIME")))
@@ -859,7 +472,28 @@ class Scrapper:
                 "working_status"
             ] = "true"
 
-            await self.__handle_page_scrape(page_instance_data)
+            done, pending = await asyncio.wait(
+                [self.__handle_page_scrape(page_instance_data)],
+                return_when=asyncio.ALL_COMPLETED,
+                timeout=50,
+            )
+
+            if pending:
+                print("Page hanged...")
+
+                if browser_id not in self.__pages_hanged_browsers:
+                    self.__pages_hanged_browsers.append(browser_id)
+
+                # if self.__check_if_browser_and_page_instance_present(
+                #     browser_id, page_id
+                # ):
+                #     await self.__browser_instances[browser_id]["pages"][page_id][
+                #         "page"
+                #     ].close()
+
+                #     del self.__browser_instances[browser_id]["pages"][page_id]
+
+                # print("Closed page for hang")
 
         # again check cz upper actions can take time & in that time browser or page may be removed
         if self.__check_if_browser_and_page_instance_present(browser_id, page_id):
@@ -926,23 +560,21 @@ class Scrapper:
                     page_content = await page_instance.content()
                     page_content_compressed = zlib.compress(page_content.encode(), 5)
 
-                await self.__update_page_scraped_time(page_id)
-
                 await self.__update_page_meta(
                     page_id, page_content_compressed, page_status
                 )
             except:
                 print("Something went wrong with page " + goto_url)
 
-                await self.__update_page_scraped_time(page_id)
-
                 await self.__update_page_meta(page_id, page_content_compressed, 999)
+
+            await self.__update_page_scraped_time(page_id)
+
+            print("Done page ----- " + goto_url + " -----")
         else:
             product_page_id = page_info["other_info"]["_id"]
 
             print("Getting product page ----- " + goto_url + " -----")
-
-            page_content_compressed = zlib.compress("".encode(), 5)
 
             try:
                 page_response = await page_instance.goto(
@@ -958,21 +590,19 @@ class Scrapper:
                     page_content = await page_instance.content()
                     page_content_compressed = zlib.compress(page_content.encode(), 5)
 
-                await self.__update_product_page_scraped_time(product_page_id)
-
                 await self.__update_product_page_meta(
                     product_page_id, page_content_compressed, page_status
                 )
             except:
                 print("Something went wrong with page " + goto_url)
 
-                await self.__update_product_page_scraped_time(product_page_id)
-
                 await self.__update_product_page_meta(
                     product_page_id, page_content_compressed, 999
                 )
 
-        print("Done page ----- " + goto_url + " -----")
+            await self.__update_product_page_scraped_time(product_page_id)
+
+            print("Done product page ----- " + goto_url + " -----")
 
         # await asyncio.sleep(int(os.getenv("SLEEP_TIME")))
 
@@ -1014,564 +644,6 @@ class Scrapper:
             },
             upsert=True,
         )
-
-    async def __do_after_scraping(self):
-        await asyncio.gather(
-            self.__parse_page(),
-            self.__parse_product_page(),
-            self.__check_links_in_guest_posts(),
-        )
-
-    async def __parse_page(self):
-        # handle page parsing
-        print("Page parsing started...")
-
-        while True:
-            print("Getting pages for parsing...")
-
-            pipeline = [
-                {
-                    "$lookup": {
-                        "from": "pages_meta",
-                        "let": {
-                            # in let get parent vars
-                            "id": {"$toString": "$_id"}
-                        },
-                        "pipeline": [
-                            {
-                                "$match": {
-                                    # use $$ to use the let var & $ to use lookups collection
-                                    "$expr": {
-                                        "$and": [
-                                            {"$eq": ["$$id", "$page_id"]},
-                                            {
-                                                "$ne": [
-                                                    {"$type": "$compressed_content"},
-                                                    "missing",
-                                                ]
-                                            },
-                                        ]
-                                    }
-                                },
-                            }
-                        ],
-                        "as": "page_meta",
-                    }
-                },
-                {
-                    "$match": {
-                        "$expr": {
-                            "$and": [
-                                {
-                                    "$lt": [
-                                        {
-                                            "$sum": [
-                                                {
-                                                    "$convert": {
-                                                        "input": "$updated_at.last_parsed_at",
-                                                        "to": "double",
-                                                        "onError": 0,
-                                                        "onNull": 0,
-                                                    }
-                                                },
-                                                3600 * 1000,
-                                            ]
-                                        },
-                                        now_time_integer(),
-                                    ]
-                                },
-                                {"$gt": [{"$size": "$page_meta"}, 0]},
-                            ]
-                        }
-                    }
-                },
-                {
-                    "$lookup": {
-                        "from": "domains",
-                        "let": {
-                            # in let get parent vars
-                            "domain_id": "$domain_id"
-                        },
-                        "pipeline": [
-                            {
-                                "$match": {
-                                    # use $$ to use the let var & $ to use lookups collection
-                                    "$expr": {
-                                        "$and": [
-                                            {
-                                                "$eq": [
-                                                    "$$domain_id",
-                                                    {"$toString": "$_id"},
-                                                ]
-                                            }
-                                        ]
-                                    }
-                                },
-                            }
-                        ],
-                        "as": "domain",
-                    }
-                },
-                {"$unwind": "$domain"},
-                {"$sort": {"updated_at.last_parsed_at": 1}},
-                {"$limit": 10},
-            ]
-
-            async for page in self.__pages.aggregate(pipeline):
-                print("Parsing page " + page["url"])
-
-                content = BeautifulSoup(
-                    zlib.decompress(page["page_meta"][0]["compressed_content"]),
-                    features="lxml",
-                )
-
-                domain_use_for = await self.__get_domain_use_for_from_domain_id(
-                    page["domain_id"]
-                )
-
-                inbound_links = []
-                outbound_links = []
-
-                for raw_link in content.find_all("a", href=True):
-                    # for urljoin base must contain scheme
-                    # urljoin('some', 'thing')
-                    # 'thing'
-                    # urljoin('http://some', 'thing')
-                    # 'http://some/thing'
-                    # urljoin('http://some/more', 'thing')
-                    # 'http://some/thing'
-                    # urljoin('http://some/more/', 'thing') # just a tad / after 'more'
-                    # 'http://some/more/thing'
-                    # urljoin('http://some/more/', '/thing')
-                    # 'http://some/thin
-
-                    joined_url = parse.urljoin(page["domain"]["url"], raw_link["href"])
-
-                    parsed_page_base = parse.urlparse(page["url"])
-                    parsed_joined_url = parse.urlparse(joined_url)
-
-                    if (
-                        parsed_joined_url[0] in ["http", "https"]
-                        and parsed_joined_url[1]
-                    ):
-                        final_url = parse.urlunparse(
-                            (
-                                parsed_joined_url.scheme,
-                                parsed_joined_url.netloc,
-                                parsed_joined_url.path,
-                                "",
-                                "",
-                                "",
-                            )
-                        )
-
-                        if (
-                            parsed_page_base[0] == parsed_joined_url[0]
-                            and parsed_page_base[1] == parsed_joined_url[1]
-                        ):
-                            if {"link": final_url} not in inbound_links:
-                                inbound_links.append({"link": final_url})
-                        else:
-                            if {"link": final_url} not in outbound_links:
-                                outbound_links.append({"link": final_url})
-
-                        # print( parse.urlparse( joined_url ) )
-
-                if domain_use_for and (
-                    "broken_links_check_service" in domain_use_for
-                    or "amazon_products_check_service" in domain_use_for
-                    or "pages_speed_check_service" in domain_use_for
-                ):
-                    for inbound_link in inbound_links:
-                        await self.__pages.update_one(
-                            {
-                                "domain_id": str(page["domain"]["_id"]),
-                                "url": inbound_link["link"],
-                            },
-                            {
-                                "$setOnInsert": {
-                                    "domain_id": str(page["domain"]["_id"]),
-                                    "url": inbound_link["link"],
-                                    "updated_at": {"last_scraped_at": "2"},
-                                }
-                            },
-                            upsert=True,
-                        )
-
-                if domain_use_for and "amazon_products_check_service" in domain_use_for:
-                    prev_original_product_urls = await self.__get_previous_products_in_pages(
-                        str(page["_id"])
-                    )
-                    current_original_product_urls = [
-                        outbound_link["link"] for outbound_link in outbound_links
-                    ]
-
-                    for_deletes = list(
-                        set(prev_original_product_urls)
-                        - set(current_original_product_urls)
-                    )
-
-                    for for_delete in for_deletes:
-                        await self.__amazon_products_in_pages.delete_one(
-                            {
-                                "page_id": str(page["_id"]),
-                                "original_product_url": for_delete,
-                            }
-                        )
-
-                # add inbound links & outbound links
-                await self.__insert_inbound_links(
-                    str(page["_id"]),
-                    [inbound_link["link"] for inbound_link in inbound_links],
-                )
-                await self.__insert_outbound_links(
-                    str(page["_id"]),
-                    [outbound_link["link"] for outbound_link in outbound_links],
-                )
-
-                await self.__pages.update_one(
-                    {"_id": page["_id"]},
-                    {"$set": {"updated_at.last_parsed_at": now_time()}},
-                )
-
-            await asyncio.sleep(int(os.getenv("SLEEP_TIME")))
-
-    async def __get_domain_use_for_from_domain_id(self, domain_id):
-        pipeline = [
-            {
-                "$match": {
-                    "$expr": {
-                        "$and": [
-                            {"$eq": ["$domain_id", domain_id]}
-                            # check status also if project is still running
-                        ]
-                    }
-                }
-            },
-            {
-                "$group": {
-                    "_id": "$domain_id",
-                    "domain_use_for": {"$mergeObjects": "$domain_use_for"},
-                }
-            },
-        ]
-
-        async for user_domain in self.__users_domains.aggregate(pipeline):
-            return user_domain["domain_use_for"]
-
-    async def __insert_inbound_links(self, page_id, links):
-        prev_links = await self.__get_previous_inbound_links(page_id)
-
-        if not prev_links:
-            if links:
-                await self.__pages_inbound_links.insert_many(
-                    [{"page_id": page_id, "url": link} for link in links]
-                )
-        else:
-            for_deletes = list(set(prev_links) - set(links))
-            for_inserts = list(set(links) - set(prev_links))
-
-            for for_delete in for_deletes:
-                await self.__pages_inbound_links.delete_one(
-                    {"page_id": page_id, "url": for_delete}
-                )
-
-            if for_inserts:
-                await self.__pages_inbound_links.insert_many(
-                    [
-                        {"page_id": page_id, "url": for_insert}
-                        for for_insert in for_inserts
-                    ]
-                )
-
-    async def __insert_outbound_links(self, page_id, links):
-        prev_links = await self.__get_previous_outbound_links(page_id)
-
-        if not prev_links:
-            if links:
-                await self.__pages_outbound_links.insert_many(
-                    [{"page_id": page_id, "url": link} for link in links]
-                )
-        else:
-            for_deletes = list(set(prev_links) - set(links))
-            for_inserts = list(set(links) - set(prev_links))
-
-            for for_delete in for_deletes:
-                await self.__pages_outbound_links.delete_one(
-                    {"page_id": page_id, "url": for_delete}
-                )
-
-            if for_inserts:
-                await self.__pages_outbound_links.insert_many(
-                    [
-                        {"page_id": page_id, "url": for_insert}
-                        for for_insert in for_inserts
-                    ]
-                )
-
-    async def __get_previous_inbound_links(self, page_id):
-        pipeline = [{"$match": {"$expr": {"$and": [{"$eq": ["$page_id", page_id]}]}},}]
-
-        prev_inbound_links = []
-
-        async for inbound_link in self.__pages_inbound_links.aggregate(pipeline):
-            prev_inbound_links.append(inbound_link["url"])
-
-        return prev_inbound_links
-
-    async def __get_previous_outbound_links(self, page_id):
-        pipeline = [{"$match": {"$expr": {"$and": [{"$eq": ["$page_id", page_id]}]}},}]
-
-        prev_outbound_links = []
-
-        async for inbound_link in self.__pages_outbound_links.aggregate(pipeline):
-            prev_outbound_links.append(inbound_link["url"])
-
-        return prev_outbound_links
-
-    async def __get_previous_products_in_pages(self, page_id):
-        pipeline = [{"$match": {"$expr": {"$and": [{"$eq": ["$page_id", page_id]}]}}}]
-
-        actual_product_url = []
-
-        async for product_in_page in self.__amazon_products_in_pages.aggregate(
-            pipeline
-        ):
-            actual_product_url.append(product_in_page["actual_product_url"])
-
-        return actual_product_url
-
-    async def __parse_product_page(self):
-        # handle product page parsing
-        print("Product page parsing started...")
-
-        while True:
-            print("Getting products for parsing...")
-
-            pipeline = [
-                {
-                    "$lookup": {
-                        "from": "amazon_products_meta",
-                        "let": {
-                            # in let get parent vars
-                            "id": {"$toString": "$_id"}
-                        },
-                        "pipeline": [
-                            {
-                                "$match": {
-                                    # use $$ to use the let var & $ to use lookups collection
-                                    "$expr": {
-                                        "$and": [
-                                            {"$eq": ["$$id", "$amazon_product_id"]},
-                                            {
-                                                "$ne": [
-                                                    {"$type": "$compressed_content"},
-                                                    "missing",
-                                                ]
-                                            },
-                                        ]
-                                    }
-                                },
-                            }
-                        ],
-                        "as": "product_page_meta",
-                    }
-                },
-                {
-                    "$match": {
-                        "$expr": {
-                            "$and": [
-                                {
-                                    "$lt": [
-                                        {
-                                            "$sum": [
-                                                {
-                                                    "$convert": {
-                                                        "input": "$updated_at.last_parsed_at",
-                                                        "to": "double",
-                                                        "onError": 0,
-                                                        "onNull": 0,
-                                                    }
-                                                },
-                                                3600 * 1000,
-                                            ]
-                                        },
-                                        now_time_integer(),
-                                    ]
-                                },
-                                {"$gt": [{"$size": "$product_page_meta"}, 0]},
-                            ]
-                        }
-                    }
-                },
-                {"$sort": {"updated_at.last_parsed_at": 1}},
-                {"$limit": 10},
-            ]
-
-            async for product_page in self.__amazon_products.aggregate(pipeline):
-                print("Parsing product page " + product_page["url"])
-
-                content = BeautifulSoup(
-                    zlib.decompress(
-                        product_page["product_page_meta"][0]["compressed_content"]
-                    ),
-                    features="lxml",
-                )
-
-                try:
-                    product_title = content.head.title.text
-
-                    product_image = (
-                        content.find("div", {"id": "main-image-container"})
-                        .find("li", {"class", "image"})
-                        .find("img")["src"]
-                    )
-                except:
-                    product_title = ""
-                    product_image = ""
-
-                    await self.__amazon_products_meta.update_one(
-                        {"amazon_product_id": str(product_page["_id"])},
-                        {
-                            "$set": {
-                                "amazon_product_id": str(product_page["_id"]),
-                                "page_status": 999,
-                            }
-                        },
-                    )
-
-                # print( product_image )
-
-                await self.__amazon_products.update_one(
-                    {"_id": product_page["_id"]},
-                    {"$set": {"updated_at.last_parsed_at": now_time()}},
-                )
-
-                await self.__amazon_products_meta.update_one(
-                    {"amazon_product_id": str(product_page["_id"])},
-                    {
-                        "$set": {
-                            "metas.product_name": product_title,
-                            "metas.product_image": product_image,
-                        }
-                    },
-                )
-
-            await asyncio.sleep(int(os.getenv("SLEEP_TIME")))
-
-    async def __check_links_in_guest_posts(self):
-        print("Links in guest post checking started...")
-
-        while True:
-            pipeline = [
-                {
-                    "$lookup": {
-                        "from": "pages",
-                        "let": {
-                            # in let get parent vars
-                            "guest_post_url": "$guest_post_url"
-                        },
-                        "pipeline": [
-                            {
-                                "$match": {
-                                    # use $$ to use the let var & $ to use lookups collection
-                                    "$expr": {
-                                        "$and": [
-                                            {"$eq": ["$$guest_post_url", "$url"]},
-                                            {
-                                                "$gt": [
-                                                    "$updated_at.last_parsed_at",
-                                                    "1",
-                                                ]
-                                            },
-                                        ]
-                                    }
-                                },
-                            }
-                        ],
-                        "as": "page",
-                    }
-                },
-                {"$unwind": "$page"},
-                {
-                    "$lookup": {
-                        "from": "pages_outbound_links",
-                        "let": {
-                            # in let get parent vars
-                            "main_page_id": {"$toString": "$page._id"}
-                        },
-                        "pipeline": [
-                            {
-                                "$match": {
-                                    # use $$ to use the let var & $ to use lookups collection
-                                    "$expr": {
-                                        "$and": [
-                                            {"$eq": ["$$main_page_id", "$page_id"]}
-                                        ]
-                                    }
-                                },
-                            }
-                        ],
-                        "as": "pages_outbound_links",
-                    }
-                },
-                {"$sort": {"updated_at.link_last_checked_at": 1}},
-                {"$limit": 10},
-            ]
-
-            async for link_in_guest_post in self.__links_in_guest_posts.aggregate(
-                pipeline
-            ):
-                guest_url_found = False
-
-                for outbound_link in link_in_guest_post["pages_outbound_links"]:
-                    if link_in_guest_post["holding_url"] == outbound_link["url"]:
-                        guest_url_found = True
-                        break
-
-                if guest_url_found:
-                    await self.__links_in_guest_posts.update_one(
-                        {"_id": link_in_guest_post["_id"]},
-                        {
-                            "$set": {
-                                "link_infos.exists": "1",
-                                "updated_at.link_last_checked_at": now_time(),
-                            }
-                        },
-                    )
-                else:
-                    await self.__links_in_guest_posts.update_one(
-                        {"_id": link_in_guest_post["_id"]},
-                        {
-                            "$set": {
-                                "link_infos.exists": "0",
-                                "updated_at.link_last_checked_at": now_time(),
-                            }
-                        },
-                    )
-
-            await asyncio.sleep(int(os.getenv("SLEEP_TIME")) + 5)
-
-    async def __do_side_by_side_works(self):
-        print("Starting side by side working instances")
-
-        # await asyncio.gather(
-        #
-        # )
-
-    # async def __check_domain_uptime( self ):
-    #     print('Domain Uptime check started...')
-    #     user_agent = {
-    #         'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Ubuntu Chromium/55.0.2883.87 '
-    #     }
-    #
-    #     while True:
-    #         pipeline = [
-    #
-    #         ]
-    #
-    #         async for user_domain in self.__users_domains.aggregate(pipeline):
-    #             print(user_domain)
 
 
 print("Initiating Process")
