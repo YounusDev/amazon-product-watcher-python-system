@@ -88,6 +88,26 @@ class Parser:
                                                     "missing",
                                                 ]
                                             },
+                                            {
+                                                "$ne": [
+                                                    {"$type": "$page_status"},
+                                                    "missing",
+                                                ]
+                                            },
+                                            {
+                                                "$in": [
+                                                    {
+                                                        "$substr": [
+                                                            {
+                                                                "$toString": "$page_status"
+                                                            },
+                                                            0,
+                                                            1,
+                                                        ]
+                                                    },
+                                                    ["2", "3"],
+                                                ]
+                                            },
                                         ]
                                     }
                                 },
@@ -112,7 +132,7 @@ class Parser:
                                                         "onNull": 0,
                                                     }
                                                 },
-                                                7200 * 1000,
+                                                21600 * 1000,
                                             ]
                                         },
                                         helpers.now_time_integer(),
@@ -452,7 +472,7 @@ class Parser:
                                                         "onNull": 0,
                                                     }
                                                 },
-                                                7200 * 1000,
+                                                21600 * 1000,
                                             ]
                                         },
                                         helpers.now_time_integer(),

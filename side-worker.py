@@ -603,8 +603,8 @@ class SideWorker:
                             )
 
                 # update same urls otherwise it will take n check same url
-                await self.__pages_outbound_links.update_many(
-                    {"url": url_obj["url"]},
+                await self.__pages_outbound_links.update_one(
+                    {"_id": url_obj["_id"]},
                     {
                         "$set": {
                             "other_info.updated_at.head_request_for_is_product_page_last_checked_at": helpers.now_time()
