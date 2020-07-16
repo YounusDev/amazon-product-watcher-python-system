@@ -359,6 +359,32 @@ class SideWorker:
                         "as": "pages_outbound_links",
                     }
                 },
+                {
+                    "$match": {
+                        "$expr": {
+                            "$and": [
+                                {
+                                    "$lt": [
+                                        {
+                                            "$sum": [
+                                                {
+                                                    "$convert": {
+                                                        "input": "$updated_at.link_last_checked_at",
+                                                        "to": "double",
+                                                        "onError": 0,
+                                                        "onNull": 0,
+                                                    }
+                                                },
+                                                10800 * 1000,
+                                            ]
+                                        },
+                                        helpers.now_time_integer(),
+                                    ]
+                                },
+                            ]
+                        }
+                    }
+                },
                 {"$sort": {"updated_at.link_last_checked_at": 1}},
                 {"$limit": 10},
             ]
@@ -366,6 +392,8 @@ class SideWorker:
             async for link_in_guest_post in self.__links_in_guest_posts.aggregate(
                 pipeline
             ):
+                print("Checking link exist for " + link_in_guest_post["holding_url"])
+
                 guest_url_found = False
 
                 for outbound_link in link_in_guest_post["pages_outbound_links"]:
