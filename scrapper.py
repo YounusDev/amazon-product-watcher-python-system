@@ -6,9 +6,6 @@ import aiohttp
 import pprint
 
 from pyppeteer import launch
-from urllib import parse
-import tldextract
-from bs4 import BeautifulSoup
 import zlib
 
 import time
@@ -44,14 +41,6 @@ class Scrapper:
         self.__urls_are_set_into_page_instances = False
 
         self.__browser_instances = {}
-
-        self.__req_header = {
-            "user-agent": (
-                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_5) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/45.0.2454.101 Safari/537.36"
-            ),
-        }
 
         self.__pages_hanged_browsers = []  # keep browser list if a page hang
 
@@ -281,7 +270,7 @@ class Scrapper:
                                                             "onNull": 0,
                                                         }
                                                     },
-                                                    3600 * 1000,
+                                                    21600 * 1000,
                                                 ]
                                             },
                                             int(time.time() * 1000),
@@ -333,7 +322,7 @@ class Scrapper:
                                                                 "onNull": 0,
                                                             }
                                                         },
-                                                        3600 * 1000,
+                                                        21600 * 1000,
                                                     ]
                                                 },
                                                 int(time.time() * 1000),
@@ -451,6 +440,9 @@ class Scrapper:
 
                     for browser_id in self.__pages_hanged_browsers:
                         if self.__check_if_browser_instance_present(browser_id):
+                            await self.__browser_instances[browser_id][
+                                "browser"
+                            ].disconnect()  # without disconnect browser close hangs
                             await self.__browser_instances[browser_id][
                                 "browser"
                             ].close()

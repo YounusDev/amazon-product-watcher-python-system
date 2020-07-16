@@ -1,13 +1,10 @@
 import os
 import asyncio
 from motor.motor_asyncio import AsyncIOMotorClient
-from pymongo.collection import ReturnDocument
 import aiohttp
 import pprint
 
-from pyppeteer import launch
 from urllib import parse
-import tldextract
 from bs4 import BeautifulSoup
 import zlib
 
@@ -56,7 +53,7 @@ class Parser:
         await asyncio.gather(self.__run_parser())
 
     async def __run_parser(self):
-        print("Starting scrapper working instances")
+        print("Starting parser working instances")
 
         await asyncio.gather(
             # self.__parse_page(),
@@ -68,7 +65,7 @@ class Parser:
         print("Page parsing started...")
 
         while True:
-            print("Getting pages for parsing...")
+            print("Getting pages for parsing... " + time.ctime())
 
             pipeline = [
                 {
@@ -387,7 +384,7 @@ class Parser:
         print("Product page parsing started...")
 
         while True:
-            print("Getting products for parsing...")
+            print("Getting products for parsing... " + time.ctime())
 
             pipeline = [
                 {

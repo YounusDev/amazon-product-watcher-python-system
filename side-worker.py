@@ -5,11 +5,8 @@ from pymongo.collection import ReturnDocument
 import aiohttp
 import pprint
 
-from pyppeteer import launch
 from urllib import parse
 import tldextract
-from bs4 import BeautifulSoup
-import zlib
 
 import time
 from datetime import datetime
@@ -32,7 +29,13 @@ class SideWorker:
         )  # init main actions
 
     def __init_variables(self):
-        pass
+        self.__req_header = {
+            "user-agent": (
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_5) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/45.0.2454.101 Safari/537.36"
+            ),
+        }
 
     def __init_actions(self):
         self.__connect_db()
@@ -57,16 +60,16 @@ class SideWorker:
     async def __run_side_worker(self):
         await asyncio.gather(
             self.__assign_domain_url_to_pages(),
-            # self.__assign_guest_post_url_to_pages(),
-            # self.__check_links_in_guest_posts(),
-            # self.__check_and_assign_to_tables_if_outbound_link_is_product_page(),
+            self.__assign_guest_post_url_to_pages(),
+            self.__check_links_in_guest_posts(),
+            self.__check_and_assign_to_tables_if_outbound_link_is_product_page(),
         )
 
     async def __assign_domain_url_to_pages(self):
         # it will take domain url & assign to pages collection for scrape if not has in there
         # no need to assign guest domain url
         while True:
-            print("Checking domain url for insert into pages table")
+            print("Checking domain url for insert into pages table... " + time.ctime())
 
             pipeline = [
                 {
@@ -196,7 +199,9 @@ class SideWorker:
 
     async def __assign_guest_post_url_to_pages(self):
         while True:
-            print("Checking guest post url for insert into pages table")
+            print(
+                "Checking guest post url for insert into pages table... " + time.ctime()
+            )
 
             pipeline = [
                 {
@@ -293,7 +298,7 @@ class SideWorker:
 
     async def __check_links_in_guest_posts(self):
         while True:
-            print("Getting links for check Links in guest post...")
+            print("Getting links for check Links in guest post... " + time.ctime())
 
             pipeline = [
                 {
@@ -393,7 +398,7 @@ class SideWorker:
 
     async def __check_and_assign_to_tables_if_outbound_link_is_product_page(self):
         while True:
-            print("Getting urls for product page check")
+            print("Getting urls for product page check... " + time.ctime())
 
             pipeline = [
                 {
@@ -505,7 +510,7 @@ class SideWorker:
 
             async for link in self.__pages_outbound_links.aggregate(pipeline):
                 head_req_list.append(
-                    self.head_request_for_is_product_page_check(link["url"], link)
+                    self.__head_request_for_is_product_page_check(link["url"], link)
                 )
 
             if len(head_req_list):
@@ -513,7 +518,7 @@ class SideWorker:
 
             await asyncio.sleep(int(os.getenv("SLEEP_TIME")) + 5)
 
-    async def head_request_for_is_product_page_check(self, url, url_obj):
+    async def __head_request_for_is_product_page_check(self, url, url_obj):
         # currently can't req for head for these https://amzn.to/2Jv8ICC
         # cz 405 method not allowd giving
 
@@ -569,23 +574,15 @@ class SideWorker:
                                 upsert=True,
                             )
 
-                    await self.__pages_outbound_links.update_one(
-                        {"_id": url_obj["_id"]},
-                        {
-                            "$set": {
-                                "other_info.updated_at.head_request_for_is_product_page_last_checked_at": helpers.now_time()
-                            }
-                        },
-                    )
-                else:
-                    await self.__pages_outbound_links.update_one(
-                        {"_id": url_obj["_id"]},
-                        {
-                            "$set": {
-                                "other_info.updated_at.head_request_for_is_product_page_last_checked_at": helpers.now_time()
-                            }
-                        },
-                    )
+                # update same urls otherwise it will take n check same url
+                await self.__pages_outbound_links.update_many(
+                    {"url": url_obj["url"]},
+                    {
+                        "$set": {
+                            "other_info.updated_at.head_request_for_is_product_page_last_checked_at": helpers.now_time()
+                        }
+                    },
+                )
 
 
 print("Initiating Side Worker Process")
