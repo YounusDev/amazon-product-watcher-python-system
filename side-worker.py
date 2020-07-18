@@ -31,9 +31,7 @@ class SideWorker:
     def __init_variables(self):
         self.__req_header = {
             "user-agent": (
-                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_5) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/45.0.2454.101 Safari/537.36"
+                "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/78.0.3904.108 Safari/537.36"
             ),
         }
 
@@ -531,7 +529,7 @@ class SideWorker:
                         "other_info.updated_at.head_request_for_is_product_page_last_checked_at": 1
                     }
                 },
-                {"$limit": 3},
+                {"$limit": 1},
             ]
 
             head_req_list = []
@@ -560,8 +558,12 @@ class SideWorker:
             ) as res:
                 final_url = str(res.url)
 
+                print(url + " has status " + str(res.status))
+
                 if str(res.status)[0] in ["2", "3"]:
                     if tldextract.extract(final_url).domain == "amazon":
+                        print(url + " is amazon product")
+
                         parsed_url = parse.urlparse(final_url)
 
                         only_product_url = parse.urlunparse(
@@ -601,6 +603,15 @@ class SideWorker:
                                 },
                                 upsert=True,
                             )
+                    else:
+                        await self.__pages_outbound_links.update_many(
+                            {"url": url},
+                            {
+                                "$set": {
+                                    "other_info.updated_at.head_request_for_is_product_page_last_checked_at": helpers.now_time()
+                                }
+                            },
+                        )
 
                 # update same urls otherwise it will take n check same url
                 await self.__pages_outbound_links.update_one(
@@ -611,6 +622,8 @@ class SideWorker:
                         }
                     },
                 )
+
+                print("Done checking " + url + " for product page")
 
 
 print("Initiating Side Worker Process")

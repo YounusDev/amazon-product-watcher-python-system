@@ -181,6 +181,11 @@ class Scrapper:
                     temp_page = await self.__browser_instances[browser][
                         "browser"
                     ].newPage()
+
+                    await temp_page.setUserAgent(
+                        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/78.0.3904.108 Safari/537.36"
+                    )
+
                     # temp_page = 'temp page'
                     page_id = await self.__get_page_instance_id(browser)
 
@@ -270,7 +275,7 @@ class Scrapper:
                                                             "onNull": 0,
                                                         }
                                                     },
-                                                    21600 * 1000,
+                                                    86400 * 1000,
                                                 ]
                                             },
                                             int(time.time() * 1000),
@@ -284,9 +289,7 @@ class Scrapper:
                     {"$sort": {"updated_at.last_scraped_at": 1}},
                     {
                         # limit only 3 so that we are only scrape 3 products at a time
-                        "$limit": 3
-                        if get_pages_upto > 3
-                        else 1
+                        "$limit": 1
                     },
                 ]
 
@@ -581,6 +584,8 @@ class Scrapper:
                     # page_headers = page_response.headers
                     page_content = await page_instance.content()
                     page_content_compressed = zlib.compress(page_content.encode(), 5)
+                else:
+                    print("Page Status " + goto_url + " => " + str(page_status))
 
                 await self.__update_product_page_meta(
                     product_page_id, page_content_compressed, page_status

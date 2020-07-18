@@ -56,8 +56,7 @@ class Parser:
         print("Starting parser working instances")
 
         await asyncio.gather(
-            # self.__parse_page(),
-            self.__parse_product_page(),
+            self.__parse_page(), self.__parse_product_page(),
         )
 
     async def __parse_page(self):
@@ -105,7 +104,7 @@ class Parser:
                                                             1,
                                                         ]
                                                     },
-                                                    ["2", "3"],
+                                                    ["2", "3", "8"],
                                                 ]
                                             },
                                         ]
@@ -444,7 +443,7 @@ class Parser:
                                                             1,
                                                         ]
                                                     },
-                                                    ["2", "3"],
+                                                    ["2", "3", "8"],
                                                 ]
                                             },
                                         ]
@@ -496,10 +495,11 @@ class Parser:
                     features="lxml",
                 )
 
+                parse_error = ""
                 product_title = ""
                 product_image = ""
                 in_stock = "0"
-                stock_check_type = "advance"
+                stock_check_type = "normal"
 
                 try:
                     product_title = content.head.title.text
@@ -524,29 +524,29 @@ class Parser:
 
                             if availability:
                                 in_stock = "1"
-                                stock_check_type = "normal"
                             elif outOfStock:
                                 in_stock = "0"
-                                stock_check_type = "normal"
+                            else:
+                                stock_check_type = "advance"
                     except:
+                        parse_error = "cart_area"
+
                         print(
                             "Something went wrong when parsing product page cart area "
                             + product_page["url"]
                         )
                 except:
+                    parse_error = "body_area"
+
                     print(
                         "Something went wrong when parsing product page "
                         + product_page["url"]
                     )
 
+                if parse_error:
                     await self.__amazon_products_meta.update_one(
                         {"amazon_product_id": str(product_page["_id"])},
-                        {
-                            "$set": {
-                                "amazon_product_id": str(product_page["_id"]),
-                                "page_status": 999,
-                            }
-                        },
+                        {"$set": {"page_status": 888,}},
                     )
 
                 # print( product_image )
@@ -567,8 +567,6 @@ class Parser:
                         }
                     },
                 )
-
-            break
 
             await asyncio.sleep(int(os.getenv("SLEEP_TIME")))
 
