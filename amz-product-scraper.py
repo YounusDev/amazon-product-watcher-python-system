@@ -8,6 +8,8 @@ import pprint
 from pyppeteer import launch
 import zlib
 
+from bs4 import BeautifulSoup
+
 import time
 from datetime import datetime
 
@@ -24,7 +26,7 @@ def now_time():
     return str(now_time_integer())
 
 
-class Scrapper:
+class ProductScrapper:
     def __init__(self):
         self.__init_variables()  # load & initiate variables
         self.__init_actions()  # run initiate action
@@ -34,10 +36,8 @@ class Scrapper:
         )  # init main actions
 
     def __init_variables(self):
-        self.__browser_instance_limit = int(os.getenv("INITIAL_BROWSER_LIMIT"))
-        self.__page_instance_limit = int(
-            os.getenv("INITIAL_PAGE_LIMIT_FOR_EACH_BROWSER")
-        )  # must start 2 or above
+        self.__browser_instance_limit = 1
+        self.__page_instance_limit = 1
         self.__urls_are_set_into_page_instances = False
 
         self.__browser_instances = {}
@@ -73,7 +73,7 @@ class Scrapper:
                 "process_started_at": datetime.utcnow(),
                 "process_updated_at": "",
                 "process_closed_at": "",
-                "worker_info": {"work": "page_scrape"},
+                "worker_info": {"work": "product_scrape"},
             }
         )
 
@@ -126,7 +126,7 @@ class Scrapper:
         while True:
             # if our browser instance is less then the limit then start
             if len(self.__browser_instances) < self.__browser_instance_limit:
-                temp_browser = await launch(headless=True, args=["--no-sandbox"],)
+                temp_browser = await launch(headless=False, args=["--no-sandbox"],)
                 # temp_browser = 'temp_browser'
                 browser_id = await self.__get_browser_instance_id()
 
@@ -234,18 +234,19 @@ class Scrapper:
         pass
 
     async def __run_scraper(self):
-        print("Starting scrapper working instances")
+        print("Starting product scrapper working instances")
 
         await asyncio.gather(
             self.__do_before_scraping(), self.__do_scraping(),
         )
 
     async def __do_before_scraping(self):
-        await asyncio.gather(self.__get_and_assign_pages_to_instances())
+        await asyncio.gather(self.__get_and_assign_product_pages_to_instances())
 
-    async def __get_and_assign_pages_to_instances(self):
+    async def __get_and_assign_product_pages_to_instances(self):
         # get pages from collection by limit then assign these into browser pages
         # if all pages status are false then only run this
+        await asyncio.sleep(10)
         while True:
             # pprint.pprint(self.__browser_instances)
             if (
@@ -253,14 +254,13 @@ class Scrapper:
                 and not self.__pages_hanged_browsers
             ):
                 # we r safe cz if limit changes midway no harm for this block
-                print("getting pages for scraping " + time.ctime())
+                print("getting products for scraping " + time.ctime())
 
                 get_pages_upto = (
                     self.__browser_instance_limit * self.__page_instance_limit
                 )
 
-                # get pages
-                pipeline_for_pages = [
+                pipeline_for_product_pages = [
                     {
                         "$match": {
                             "$expr": {
@@ -277,39 +277,31 @@ class Scrapper:
                                                             "onNull": 0,
                                                         }
                                                     },
-                                                    21600 * 1000,
+                                                    86400 * 1000,
                                                 ]
                                             },
                                             int(time.time() * 1000),
                                         ]
-                                    }
+                                    },
                                 ]
                                 # handle status & other match
                             }
                         }
                     },
+                    {"$sort": {"updated_at.last_scraped_at": 1}},
                     {
-                        # this sort is used before group
-                        "$sort": {"updated_at.last_scraped_at": 1}
+                        # limit only 1 so that we only scrape 1 products at a time
+                        "$limit": 1
                     },
-                    {
-                        "$group": {
-                            "_id": "$domain_id",
-                            # only 1 page from 1 domain is taken currently
-                            # if use push group will try to get all pages from a domain
-                            # if we get all page use slice. but its not gd
-                            "page": {"$first": "$$ROOT"},
-                        }
-                    },
-                    {
-                        # this is for after final sorting
-                        "$sort": {"page.updated_at.last_scraped_at": 1}
-                    },
-                    {"$limit": get_pages_upto},
                 ]
 
-                async for page in self.__pages.aggregate(pipeline_for_pages):
-                    self.__assign_pages_into_instances(page["page"]["url"], page)
+                async for product_page in self.__amazon_products.aggregate(
+                    pipeline_for_product_pages
+                ):
+                    print(product_page)
+                    self.__assign_pages_into_instances(
+                        product_page["url"], product_page
+                    )
 
                 self.__urls_are_set_into_page_instances = True
 
@@ -405,6 +397,8 @@ class Scrapper:
 
                     print("Closed browsers cz a page is hanged")
 
+                break
+
                 self.__urls_are_set_into_page_instances = False
 
             await asyncio.sleep(int(os.getenv("SLEEP_TIME")))
@@ -417,7 +411,7 @@ class Scrapper:
             ] = "true"
 
             done, pending = await asyncio.wait(
-                [self.__handle_page_scrape(page_instance_data)],
+                [self.__handle_product_page_scrape(page_instance_data)],
                 return_when=asyncio.ALL_COMPLETED,
                 timeout=50,
             )
@@ -461,22 +455,17 @@ class Scrapper:
 
         return page_instance[page_id]
 
-    async def __handle_page_scrape(self, page_instance_data):
-        # print( '-------------------------------------------------------' )
-        # print( self.__browser_instances )
-        # print( page_instance_data )
-        # print( '-------------------------------------------------------' )
-
+    async def __handle_product_page_scrape(self, page_instance_data):
         page_info = page_instance_data["info"]
-        page_scrape_type = page_info["scrape_type"]
         goto_url = page_info["url"]
         page_instance = page_instance_data["page"]
 
         page_content_compressed = zlib.compress("".encode(), 5)
+        page_status = 0
 
-        page_id = page_info["other_info"]["page"]["_id"]
+        product_page_id = page_info["other_info"]["_id"]
 
-        print("Getting page ----- " + goto_url + " -----")
+        print("Getting product page ----- " + goto_url + " -----")
 
         try:
             page_response = await page_instance.goto(
@@ -487,34 +476,101 @@ class Scrapper:
             if str(page_status) and str(page_status)[0] in [
                 "2",
                 "3",
-            ]:  # check if status code 2xx or 3xx
+            ]:  # check if status code 2xx or 3xx :
                 # page_headers = page_response.headers
                 page_content = await page_instance.content()
-                page_content_compressed = zlib.compress(page_content.encode(), 5)
 
-            await self.__update_page_meta(page_id, page_content_compressed, page_status)
+                parsed_content = BeautifulSoup(page_content, features="lxml")
+
+                try:
+                    cart_div = parsed_content.find("form", id="addToCart")
+
+                    if cart_div:
+                        availability = cart_div.find("div", id="availability")
+
+                        outOfStock = cart_div.find("div", id="outOfStock")
+                        # print(cart_div)
+                        # print(availability)
+                        # print(outOfStock)
+
+                        if not availability and not outOfStock:
+                            print("Doing advance cart check for " + goto_url)
+
+                            ds = parsed_content.find(
+                                "select", id="native_dropdown_selected_size_name"
+                            )
+
+                            if ds:
+                                await page_instance.click(
+                                    "select#native_dropdown_selected_size_name"
+                                )
+
+                                page_content = await page_instance.content()
+                                parsed_content = BeautifulSoup(
+                                    page_content, features="lxml"
+                                )
+
+                                dsi = parsed_content.find("li", id="size_name_0")
+
+                                if dsi:
+                                    await page_instance.click("li#size_name_0 > a")
+                                    await page_instance.waitForNavigation(
+                                        {"waitUntil": "networkidle2"}
+                                    )
+                                else:
+                                    page_status = 888
+
+                                    print(
+                                        "Select elements not found for  "
+                                        + product_page["url"]
+                                    )
+                            else:
+                                page_status = 888
+
+                                print(
+                                    "Select tag not found for  " + product_page["url"]
+                                )
+                except:
+                    page_status = 888
+
+                    print(
+                        "Something went wrong when parsing product page cart area "
+                        + product_page["url"]
+                    )
+
+                page_content = await page_instance.content()
+                page_content_compressed = zlib.compress(page_content.encode(), 5)
+            else:
+                print("Page Status " + goto_url + " => " + str(page_status))
         except:
             print("Something went wrong with page " + goto_url)
 
-            await self.__update_page_meta(page_id, page_content_compressed, 999)
+            page_status = 999
 
-        await self.__update_page_scraped_time(page_id)
-
-        print("Done page ----- " + goto_url + " -----")
-
-        # await asyncio.sleep(int(os.getenv("SLEEP_TIME")))
-
-    async def __update_page_scraped_time(self, page_id):
-        await self.__pages.update_one(
-            {"_id": page_id}, {"$set": {"updated_at.last_scraped_at": now_time()}}
+        await self.__update_product_page_meta(
+            product_page_id, page_content_compressed, page_status
         )
 
-    async def __update_page_meta(self, page_id, compressed_content, status):
-        await self.__pages_meta.update_one(
-            {"page_id": str(page_id)},
+        await self.__update_product_page_scraped_time(product_page_id)
+
+        print("Done product page ----- " + goto_url + " -----")
+
+        await asyncio.sleep(int(os.getenv("SLEEP_TIME")))
+
+    async def __update_product_page_scraped_time(self, product_page_id):
+        await self.__amazon_products.update_one(
+            {"_id": product_page_id},
+            {"$set": {"updated_at.last_scraped_at": now_time()}},
+        )
+
+    async def __update_product_page_meta(
+        self, product_page_id, compressed_content, status
+    ):
+        await self.__amazon_products_meta.update_one(
+            {"amazon_product_id": str(product_page_id)},
             {
                 "$set": {
-                    "page_id": str(page_id),
+                    "amazon_product_id": str(product_page_id),
                     "compressed_content": compressed_content,
                     "page_status": status,
                 }
@@ -525,6 +581,6 @@ class Scrapper:
 
 print("Initiating Process")
 
-Scrapper()
+ProductScrapper()
 
 print("All Done")  # but it won't be called ever
