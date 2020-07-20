@@ -509,29 +509,23 @@ class Parser:
                         .find("img")["src"]
                     )
 
-                    try:
-                        add_to_cart_div = content.find("form", id="addToCart")
+                    add_to_cart_div = content.find("form", id="addToCart")
 
-                        if add_to_cart_div:
-                            availability = add_to_cart_div.find(
-                                "div", id="availability"
-                            )
+                    if add_to_cart_div:
+                        availability = add_to_cart_div.find("div", id="availability")
 
-                            outOfStock = add_to_cart_div.find("div", id="outOfStock")
+                        outOfStock = add_to_cart_div.find("div", id="outOfStock")
 
-                            if availability:
-                                in_stock = "1"
-                            elif outOfStock:
-                                in_stock = "0"
-                            else:
-                                parse_error = "cart_area"
-                    except:
+                        if availability:
+                            in_stock = "1"
+                        elif outOfStock:
+                            in_stock = "0"
+                        else:
+                            parse_error = "cart_area"
+                    else:
                         parse_error = "cart_area"
 
-                        print(
-                            "Something went wrong when parsing product page cart area "
-                            + product_page["url"]
-                        )
+                        print("Cart area not found for " + product_page["url"])
                 except:
                     parse_error = "body_area"
 

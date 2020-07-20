@@ -24,7 +24,7 @@ def now_time():
     return str(now_time_integer())
 
 
-class Scrapper:
+class Scraper:
     def __init__(self):
         self.__init_variables()  # load & initiate variables
         self.__init_actions()  # run initiate action
@@ -234,7 +234,7 @@ class Scrapper:
         pass
 
     async def __run_scraper(self):
-        print("Starting scrapper working instances")
+        print("Starting scraper working instances")
 
         await asyncio.gather(
             self.__do_before_scraping(), self.__do_scraping(),
@@ -380,7 +380,7 @@ class Scrapper:
                             and self.__browser_instances[browser]["pages"][page]
                         ):
                             task_list.append(
-                                self.__page_scrapper_task(
+                                self.__page_scraper_task(
                                     page_instance_data, page, browser
                                 )
                             )
@@ -409,7 +409,7 @@ class Scrapper:
 
             await asyncio.sleep(int(os.getenv("SLEEP_TIME")))
 
-    async def __page_scrapper_task(self, page_instance_data, page_id, browser_id):
+    async def __page_scraper_task(self, page_instance_data, page_id, browser_id):
         # handle page scrape
         if self.__check_if_browser_and_page_instance_present(browser_id, page_id):
             self.__browser_instances[browser_id]["pages"][page_id][
@@ -468,7 +468,6 @@ class Scrapper:
         # print( '-------------------------------------------------------' )
 
         page_info = page_instance_data["info"]
-        page_scrape_type = page_info["scrape_type"]
         goto_url = page_info["url"]
         page_instance = page_instance_data["page"]
 
@@ -525,6 +524,6 @@ class Scrapper:
 
 print("Initiating Process")
 
-Scrapper()
+Scraper()
 
 print("All Done")  # but it won't be called ever
