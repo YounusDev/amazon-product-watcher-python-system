@@ -397,8 +397,6 @@ class ProductScrapper:
 
                     print("Closed browsers cz a page is hanged")
 
-                break
-
                 self.__urls_are_set_into_page_instances = False
 
             await asyncio.sleep(int(os.getenv("SLEEP_TIME")))

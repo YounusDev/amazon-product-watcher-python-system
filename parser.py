@@ -499,7 +499,6 @@ class Parser:
                 product_title = ""
                 product_image = ""
                 in_stock = "0"
-                stock_check_type = "normal"
 
                 try:
                     product_title = content.head.title.text
@@ -511,23 +510,21 @@ class Parser:
                     )
 
                     try:
-                        add_to_cart_div = content.find("form", {"id": "addToCart"})
+                        add_to_cart_div = content.find("form", id="addToCart")
 
                         if add_to_cart_div:
                             availability = add_to_cart_div.find(
-                                "div", {"id": "availability"}
+                                "div", id="availability"
                             )
 
-                            outOfStock = add_to_cart_div.find(
-                                "div", {"id", "outOfStock"}
-                            )
+                            outOfStock = add_to_cart_div.find("div", id="outOfStock")
 
                             if availability:
                                 in_stock = "1"
                             elif outOfStock:
                                 in_stock = "0"
                             else:
-                                stock_check_type = "advance"
+                                parse_error = "cart_area"
                     except:
                         parse_error = "cart_area"
 
@@ -563,7 +560,6 @@ class Parser:
                             "metas.product_name": product_title,
                             "metas.product_image": product_image,
                             "metas.in_stock": in_stock,
-                            "metas.stock_check_type": stock_check_type,
                         }
                     },
                 )
