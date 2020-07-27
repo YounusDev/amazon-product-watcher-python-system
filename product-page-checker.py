@@ -129,16 +129,21 @@ class ProductPageCheker:
         while True:
             # if our browser instance is less then the limit then start
             if len(self.__browser_instances) < self.__browser_instance_limit:
-                temp_browser = await launch(headless=True, args=["--no-sandbox"],)
-                # temp_browser = 'temp_browser'
-                browser_id = await self.__get_browser_instance_id()
+                try:
+                    temp_browser = await launch(headless=True, args=["--no-sandbox"],)
+                    # temp_browser = 'temp_browser'
+                    browser_id = await self.__get_browser_instance_id()
 
-                self.__browser_instances[browser_id] = {
-                    "browser": temp_browser,
-                    "pages": {},
-                }
+                    self.__browser_instances[browser_id] = {
+                        "browser": temp_browser,
+                        "pages": {},
+                    }
 
-                print("Created browser instance -----> " + browser_id)
+                    print("Created browser instance -----> " + browser_id)
+                except:
+                    print("Some problem when creating browser instance")
+
+                    await asyncio.sleep(30)
 
             await asyncio.sleep(int(os.getenv("SLEEP_TIME")))
 
