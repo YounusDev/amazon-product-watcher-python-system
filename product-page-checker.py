@@ -8,6 +8,9 @@ import pprint
 from pyppeteer import launch
 import zlib
 
+from urllib import parse
+import tldextract
+
 import time
 from datetime import datetime
 
@@ -62,6 +65,7 @@ class ProductPageCheker:
         self.__pages_outbound_links = self.__db.pages_outbound_links
         self.__amazon_products = self.__db.amazon_products
         self.__amazon_products_meta = self.__db.amazon_products_meta
+        self.__amazon_products_in_pages = self.__db.amazon_products_in_pages
 
     async def __get_process_instance_id(self):
         # save instance info when script run
@@ -537,11 +541,11 @@ class ProductPageCheker:
 
             final_url = str(page_instance.url)
 
-            print(url + " redirected to " + final_url)
-            print(url + " has status " + str(page_response.status))
+            print(goto_url + " redirected to " + final_url)
+            print(goto_url + " has status " + str(page_response.status))
 
             if tldextract.extract(final_url).domain == "amazon":
-                print(url + " is amazon product")
+                print(goto_url + " is amazon product")
 
                 parsed_url = parse.urlparse(final_url)
 
@@ -562,14 +566,14 @@ class ProductPageCheker:
                             "product_id": str(product["_id"]),
                             "page_id": row_info["page_id"],
                             "user_domain_id": str(user_domain["_id"]),
-                            "original_url": url,
+                            "original_url": goto_url,
                         },
                         {
                             "$setOnInsert": {
                                 "product_id": str(product["_id"]),
                                 "page_id": row_info["page_id"],
                                 "user_domain_id": str(user_domain["_id"]),
-                                "original_url": url,
+                                "original_url": goto_url,
                             },
                             "$set": {"actual_product_url": final_url,},
                         },
@@ -580,17 +584,17 @@ class ProductPageCheker:
                     {"_id": _id},
                     {
                         "$set": {
-                            "other_info.updated_at.head_request_for_is_product_page_last_checked_at": helpers.now_time()
+                            "other_info.updated_at.head_request_for_is_product_page_last_checked_at": now_time()
                         }
                     },
                 )
             else:
                 # update same urls otherwise it will take n check same url
                 await self.__pages_outbound_links.update_many(
-                    {"url": url},
+                    {"url": goto_url},
                     {
                         "$set": {
-                            "other_info.updated_at.head_request_for_is_product_page_last_checked_at": helpers.now_time()
+                            "other_info.updated_at.head_request_for_is_product_page_last_checked_at": now_time()
                         }
                     },
                 )
@@ -601,14 +605,14 @@ class ProductPageCheker:
                 {"_id": _id},
                 {
                     "$set": {
-                        "other_info.updated_at.head_request_for_is_product_page_last_checked_at": helpers.now_time()
+                        "other_info.updated_at.head_request_for_is_product_page_last_checked_at": now_time()
                     }
                 },
             )
 
         print("Done page check ----- " + goto_url + " -----")
 
-        await asyncio.sleep(int(os.getenv("SLEEP_TIME")) + 10)
+        # await asyncio.sleep(int(os.getenv("SLEEP_TIME")))
 
 
 print("Initiating Process")

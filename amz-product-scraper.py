@@ -470,6 +470,8 @@ class ProductScraper:
             )
             page_status = page_response.status
 
+            print("Page ----- " + goto_url + " ----- status ----- " + str(page_status))
+
             if str(page_status) and str(page_status)[0] in [
                 "2",
                 "3",
@@ -479,61 +481,52 @@ class ProductScraper:
 
                 parsed_content = BeautifulSoup(page_content, features="lxml")
 
-                try:
-                    cart_div = parsed_content.find("form", id="addToCart")
+                # try:
+                cart_div = parsed_content.find("form", id="addToCart")
 
-                    if cart_div:
-                        availability = cart_div.find("div", id="availability")
+                if cart_div:
+                    availability = cart_div.find("div", id="availability")
 
-                        outOfStock = cart_div.find("div", id="outOfStock")
-                        # print(cart_div)
-                        # print(availability)
-                        # print(outOfStock)
+                    outOfStock = cart_div.find("div", id="outOfStock")
+                    # print(cart_div)
+                    # print(availability)
+                    # print(outOfStock)
 
-                        if not availability and not outOfStock:
-                            print("Doing advance cart check for " + goto_url)
+                    if not availability and not outOfStock:
+                        print("Doing advance cart check for " + goto_url)
 
-                            ds = parsed_content.find(
-                                "select", id="native_dropdown_selected_size_name"
+                        ds = parsed_content.find(
+                            "select", id="native_dropdown_selected_size_name"
+                        )
+
+                        if ds:
+                            await page_instance.click(
+                                "select#native_dropdown_selected_size_name"
                             )
 
-                            if ds:
-                                await page_instance.click(
-                                    "select#native_dropdown_selected_size_name"
+                            page_content = await page_instance.content()
+                            parsed_content = BeautifulSoup(
+                                page_content, features="lxml"
+                            )
+
+                            dsi = parsed_content.find("li", id="size_name_0")
+
+                            if dsi:
+                                await page_instance.click("li#size_name_0 > a")
+                                await page_instance.waitForNavigation(
+                                    {"waitUntil": "networkidle2"}
                                 )
-
-                                page_content = await page_instance.content()
-                                parsed_content = BeautifulSoup(
-                                    page_content, features="lxml"
-                                )
-
-                                dsi = parsed_content.find("li", id="size_name_0")
-
-                                if dsi:
-                                    await page_instance.click("li#size_name_0 > a")
-                                    await page_instance.waitForNavigation(
-                                        {"waitUntil": "networkidle2"}
-                                    )
-                                else:
-                                    page_status = 888
-
-                                    print(
-                                        "Select elements not found for  "
-                                        + product_page["url"]
-                                    )
                             else:
                                 page_status = 888
 
                                 print(
-                                    "Select tag not found for  " + product_page["url"]
+                                    "Select elements not found for  "
+                                    + product_page["url"]
                                 )
-                except:
-                    page_status = 888
+                        else:
+                            page_status = 888
 
-                    print(
-                        "Something went wrong when parsing product page cart area "
-                        + product_page["url"]
-                    )
+                            print("Select tag not found for  " + product_page["url"])
 
                 page_content = await page_instance.content()
                 page_content_compressed = zlib.compress(page_content.encode(), 5)

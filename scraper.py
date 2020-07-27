@@ -277,7 +277,7 @@ class Scraper:
                                                             "onNull": 0,
                                                         }
                                                     },
-                                                    21600 * 1000,
+                                                    21600 * 1000,  # 6hr
                                                 ]
                                             },
                                             int(time.time() * 1000),
