@@ -210,6 +210,29 @@ class Parser:
                     if (
                         parsed_joined_url[0] in ["http", "https"]
                         and parsed_joined_url[1]
+                        and (
+                            not parsed_joined_url[2]
+                            or (
+                                (
+                                    parsed_joined_url[2]
+                                    and not len(parsed_joined_url.path.split("."))
+                                )
+                                or (
+                                    parsed_joined_url[2]
+                                    and len(parsed_joined_url.path.split("."))
+                                    and parsed_joined_url.path.split(".")[-1]
+                                    not in [
+                                        "jpg",
+                                        "jpeg",
+                                        "png",
+                                        "zip",
+                                        "pdf",
+                                        "doc",
+                                        "gif",
+                                    ]
+                                )
+                            )
+                        )
                     ):
                         final_url = parse.urlunparse(
                             (
