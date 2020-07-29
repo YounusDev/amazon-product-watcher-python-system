@@ -263,11 +263,21 @@ class SideWorker:
 
             async for guest_post in self.__links_in_guest_posts.aggregate(pipeline):
                 # print(guest_post)
-                service_info = guest_post["user_domain"][0]["domain_use_for"][
-                    "guest_posts_check_service"
-                ]
-                guest_domain_id = service_info["guest_domain_id"]
                 guest_post_url = guest_post["guest_post_url"]
+                parsed_guest_post_url = parse.urlparse(guest_post_url)
+                guest_domain = parse.urlunparse(
+                    (
+                        parsed_guest_post_url.scheme,
+                        parsed_guest_post_url.netloc,
+                        "",
+                        "",
+                        "",
+                        "",
+                    )
+                )
+
+                guest_domain_info = await self.__domains.find_one({"url": guest_domain})
+                guest_domain_id = str(guest_domain_info["_id"])
 
                 # if need use transaction
                 await self.__pages.update_one(
