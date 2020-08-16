@@ -2,3 +2,4 @@
 .vscode
 amzwatch-system.iml
 .env
+.venv

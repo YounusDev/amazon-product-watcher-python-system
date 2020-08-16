@@ -68,6 +68,28 @@ class Parser:
 
             pipeline = [
                 {
+                    "$match": {
+                        "$expr": {
+                            "$lt": [
+                                {
+                                    "$sum": [
+                                        {
+                                            "$convert": {
+                                                "input": "$updated_at.last_parsed_at",
+                                                "to": "double",
+                                                "onError": 0,
+                                                "onNull": 0,
+                                            }
+                                        },
+                                        21600 * 1000,
+                                    ]
+                                },
+                                helpers.now_time_integer(),
+                            ]
+                        }
+                    }
+                },
+                {
                     "$lookup": {
                         "from": "pages_meta",
                         "let": {
@@ -115,33 +137,7 @@ class Parser:
                         "as": "page_meta",
                     }
                 },
-                {
-                    "$match": {
-                        "$expr": {
-                            "$and": [
-                                {
-                                    "$lt": [
-                                        {
-                                            "$sum": [
-                                                {
-                                                    "$convert": {
-                                                        "input": "$updated_at.last_parsed_at",
-                                                        "to": "double",
-                                                        "onError": 0,
-                                                        "onNull": 0,
-                                                    }
-                                                },
-                                                21600 * 1000,
-                                            ]
-                                        },
-                                        helpers.now_time_integer(),
-                                    ]
-                                },
-                                {"$gt": [{"$size": "$page_meta"}, 0]},
-                            ]
-                        }
-                    }
-                },
+                {"$match": {"$expr": {"$gt": [{"$size": "$page_meta"}, 0]},}},
                 {
                     "$lookup": {
                         "from": "domains",
@@ -430,6 +426,28 @@ class Parser:
 
             pipeline = [
                 {
+                    "$match": {
+                        "$expr": {
+                            "$lt": [
+                                {
+                                    "$sum": [
+                                        {
+                                            "$convert": {
+                                                "input": "$updated_at.last_parsed_at",
+                                                "to": "double",
+                                                "onError": 0,
+                                                "onNull": 0,
+                                            }
+                                        },
+                                        21600 * 1000,
+                                    ]
+                                },
+                                helpers.now_time_integer(),
+                            ]
+                        }
+                    }
+                },
+                {
                     "$lookup": {
                         "from": "amazon_products_meta",
                         "let": {
@@ -478,32 +496,6 @@ class Parser:
                     }
                 },
                 {"$unwind": "$product_page_meta"},
-                {
-                    "$match": {
-                        "$expr": {
-                            "$and": [
-                                {
-                                    "$lt": [
-                                        {
-                                            "$sum": [
-                                                {
-                                                    "$convert": {
-                                                        "input": "$updated_at.last_parsed_at",
-                                                        "to": "double",
-                                                        "onError": 0,
-                                                        "onNull": 0,
-                                                    }
-                                                },
-                                                21600 * 1000,
-                                            ]
-                                        },
-                                        helpers.now_time_integer(),
-                                    ]
-                                },
-                            ]
-                        }
-                    }
-                },
                 {"$sort": {"updated_at.last_parsed_at": 1}},
                 {"$limit": 100},
             ]

@@ -188,6 +188,7 @@ class ProductScraper:
                         "browser"
                     ].newPage()
 
+                    # its importand otherwise amazon will throw error [503]
                     await temp_page.setUserAgent(
                         "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/78.0.3904.108 Safari/537.36"
                     )
@@ -282,7 +283,7 @@ class ProductScraper:
                                                             "onNull": 0,
                                                         }
                                                     },
-                                                    86400 * 1000,
+                                                    86400 * 1000,  # 1day
                                                 ]
                                             },
                                             int(time.time() * 1000),
@@ -384,7 +385,7 @@ class ProductScraper:
                 await asyncio.gather(*task_list)
 
                 if self.__pages_hanged_browsers:
-                    print("Closing browsers cz a page is hanged")
+                    print("Closing browsers cz a page was hanged")
 
                     for browser_id in self.__pages_hanged_browsers:
                         if self.__check_if_browser_instance_present(browser_id):
@@ -399,7 +400,7 @@ class ProductScraper:
 
                     self.__pages_hanged_browsers = []
 
-                    print("Closed browsers cz a page is hanged")
+                    print("Closed browsers cz a page was hanged")
 
                 self.__urls_are_set_into_page_instances = False
 

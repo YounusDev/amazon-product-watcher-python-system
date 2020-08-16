@@ -70,6 +70,29 @@ class SideWorker:
 
             pipeline = [
                 {
+                    "$match": {
+                        "$expr": {
+                            "$or": [
+                                {"$eq": [{"$type": "$updated_at"}, "missing",]},
+                                {
+                                    "$eq": [
+                                        {
+                                            "$type": "$updated_at.domain_url_in_page_last_check_at"
+                                        },
+                                        "missing",
+                                    ]
+                                },
+                                {
+                                    "$eq": [
+                                        "$updated_at.domain_url_in_page_last_check_at",
+                                        "",
+                                    ]
+                                },
+                            ]
+                        }
+                    }
+                },
+                {
                     "$lookup": {
                         "from": "users_domains",
                         "let": {
@@ -120,41 +143,7 @@ class SideWorker:
                         "as": "user_domains",
                     }
                 },
-                # use unwind if needed. it will generate results by path array
-                # if your result is {a: a, b: [c: c, d: d]}
-                # then unwind result {a: a, b: {c: c}} & {a: a, b: {d: d}}
-                # {
-                #     "$unwind": { "path": "$user_domains" }
-                # },
-                # sort should be applied before limit
-                {
-                    "$match": {
-                        "$expr": {
-                            "$and": [
-                                {
-                                    "$or": [
-                                        {"$eq": [{"$type": "$updated_at"}, "missing",]},
-                                        {
-                                            "$eq": [
-                                                {
-                                                    "$type": "$updated_at.domain_url_in_page_last_check_at"
-                                                },
-                                                "missing",
-                                            ]
-                                        },
-                                        {
-                                            "$eq": [
-                                                "$updated_at.domain_url_in_page_last_check_at",
-                                                "",
-                                            ]
-                                        },
-                                    ]
-                                },
-                                {"$gt": [{"$size": "$user_domains"}, 0]},
-                            ]
-                        }
-                    }
-                },
+                {"$match": {"$expr": {"$gt": [{"$size": "$user_domains"}, 0]},}},
                 # {
                 #     "$project": {
                 #         # reformat parent result
@@ -309,6 +298,28 @@ class SideWorker:
 
             pipeline = [
                 {
+                    "$match": {
+                        "$expr": {
+                            "$lt": [
+                                {
+                                    "$sum": [
+                                        {
+                                            "$convert": {
+                                                "input": "$updated_at.link_last_checked_at",
+                                                "to": "double",
+                                                "onError": 0,
+                                                "onNull": 0,
+                                            }
+                                        },
+                                        10800 * 1000,
+                                    ]
+                                },
+                                helpers.now_time_integer(),
+                            ]
+                        },
+                    }
+                },
+                {
                     "$lookup": {
                         "from": "pages",
                         "let": {
@@ -364,32 +375,6 @@ class SideWorker:
                             }
                         ],
                         "as": "pages_outbound_links",
-                    }
-                },
-                {
-                    "$match": {
-                        "$expr": {
-                            "$and": [
-                                {
-                                    "$lt": [
-                                        {
-                                            "$sum": [
-                                                {
-                                                    "$convert": {
-                                                        "input": "$updated_at.link_last_checked_at",
-                                                        "to": "double",
-                                                        "onError": 0,
-                                                        "onNull": 0,
-                                                    }
-                                                },
-                                                10800 * 1000,
-                                            ]
-                                        },
-                                        helpers.now_time_integer(),
-                                    ]
-                                },
-                            ]
-                        }
                     }
                 },
                 {"$sort": {"updated_at.link_last_checked_at": 1}},

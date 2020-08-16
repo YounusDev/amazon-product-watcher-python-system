@@ -282,7 +282,7 @@ class Scraper:
                                                             "onNull": 0,
                                                         }
                                                     },
-                                                    21600 * 1000,  # 6hr
+                                                    43200 * 1000,  # 12hr
                                                 ]
                                             },
                                             int(time.time() * 1000),
@@ -344,6 +344,7 @@ class Scraper:
 
                     # assign to page_instance_urls if track url
 
+                    # we need this for bereak loop after page assign
                     return  # it will break from parents also
 
     def __check_url_if_already_has_in_instances(self, url):
@@ -384,16 +385,19 @@ class Scraper:
                             and self.__browser_instances[browser]
                             and self.__browser_instances[browser]["pages"][page]
                         ):
+                            # assign all pending pages for scrape
                             task_list.append(
                                 self.__page_scraper_task(
                                     page_instance_data, page, browser
                                 )
                             )
 
+                # do the scrape work now
                 await asyncio.gather(*task_list)
 
+                # control if a page was hanged
                 if self.__pages_hanged_browsers:
-                    print("Closing browsers cz a page is hanged")
+                    print("Closing browsers cz a page was hanged")
 
                     for browser_id in self.__pages_hanged_browsers:
                         if self.__check_if_browser_instance_present(browser_id):
@@ -408,7 +412,7 @@ class Scraper:
 
                     self.__pages_hanged_browsers = []
 
-                    print("Closed browsers cz a page is hanged")
+                    print("Closed browsers cz a page was hanged")
 
                 self.__urls_are_set_into_page_instances = False
 
@@ -421,12 +425,14 @@ class Scraper:
                 "working_status"
             ] = "true"
 
+            # timeout after 50 sec cz after that we know a page stuck
             done, pending = await asyncio.wait(
                 [self.__handle_page_scrape(page_instance_data)],
                 return_when=asyncio.ALL_COMPLETED,
                 timeout=50,
             )
 
+            # if has any pending then that mean page hang
             if pending:
                 print("Page hanged...")
 

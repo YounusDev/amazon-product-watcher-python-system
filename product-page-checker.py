@@ -268,6 +268,32 @@ class ProductPageCheker:
 
                 pipeline_for_pages = [
                     {
+                        "$match": {
+                            "$expr": {
+                                "$and": [
+                                    {
+                                        "$lt": [
+                                            {
+                                                "$sum": [
+                                                    {
+                                                        "$convert": {
+                                                            "input": "$other_info.updated_at.head_request_for_is_product_page_last_checked_at",
+                                                            "to": "double",
+                                                            "onError": 0,
+                                                            "onNull": 0,
+                                                        }
+                                                    },
+                                                    259200 * 1000,  # 3 day
+                                                ]
+                                            },
+                                            now_time_integer(),
+                                        ]
+                                    },
+                                ]
+                            }
+                        }
+                    },
+                    {
                         "$lookup": {
                             "from": "pages",
                             "let": {"page_id": "$page_id"},
@@ -340,27 +366,7 @@ class ProductPageCheker:
                     {
                         "$match": {
                             "$expr": {
-                                "$and": [
-                                    {"$gt": [{"$size": "$user_domains"}, 0]},
-                                    {
-                                        "$lt": [
-                                            {
-                                                "$sum": [
-                                                    {
-                                                        "$convert": {
-                                                            "input": "$other_info.updated_at.head_request_for_is_product_page_last_checked_at",
-                                                            "to": "double",
-                                                            "onError": 0,
-                                                            "onNull": 0,
-                                                        }
-                                                    },
-                                                    259200 * 1000,  # 3 day
-                                                ]
-                                            },
-                                            now_time_integer(),
-                                        ]
-                                    },
-                                ]
+                                "$and": [{"$gt": [{"$size": "$user_domains"}, 0]},]
                             }
                         }
                     },
